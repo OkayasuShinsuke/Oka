@@ -122,9 +122,9 @@ class Transcriber:
                 },
                 word_timestamps=False,
                 condition_on_previous_text=True,
-                # 日本語品質向上オプション
+                # 日本語品質向上: initial_promptで日本語出力を強制
                 without_timestamps=False,
-                initial_prompt=None,
+                initial_prompt="日本語の音声認識です。句読点を正確に付けてください。",
             )
 
             texts = []

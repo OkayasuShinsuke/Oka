@@ -89,6 +89,9 @@ class AudioRecorder:
         started = False  # 発話開始したか
         pre_speech_buffer = []  # 発話前のバッファ (クリップ防止)
         pre_speech_frames = int(300 / self.FRAME_DURATION_MS)  # 300ms分
+        # ヒステリシス: 連続N音声フレームで録音開始 (誤検知抑制)
+        SPEECH_FRAMES_TO_START = 3
+        consecutive_speech = 0
 
         audio_queue = queue.Queue()
 
@@ -126,6 +129,11 @@ class AudioRecorder:
                         if len(pre_speech_buffer) > pre_speech_frames:
                             pre_speech_buffer.pop(0)
                         if is_speech:
+                            consecutive_speech += 1
+                        else:
+                            consecutive_speech = 0
+                        # 連続SPEECH_FRAMES_TO_STARTフレーム音声で録音開始 (誤検知抑制)
+                        if consecutive_speech >= SPEECH_FRAMES_TO_START:
                             started = True
                             if self._on_start:
                                 self._on_start()

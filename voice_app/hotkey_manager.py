@@ -27,7 +27,7 @@ class HotkeyManager:
                 if hotkey in self._hotkeys:
                     self.unregister(hotkey)
 
-                handle = keyboard.add_hotkey(hotkey, callback, suppress=False)
+                handle = keyboard.add_hotkey(hotkey, callback, suppress=True)
                 self._hotkeys[hotkey] = handle
                 print(f"[HotkeyManager] 登録完了: {hotkey}")
 
