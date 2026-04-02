@@ -1,0 +1,32 @@
+# 音声認識アプリ依存パッケージ
+# Python 3.9+ 推奨
+
+# 音声認識 (Whisper - 高精度日本語対応)
+faster-whisper>=1.0.0
+
+# 音声キャプチャ
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# VAD (音声区間検出)
+webrtcvad>=2.0.10
+
+# ホットキー
+keyboard>=0.13.5
+
+# システムトレイ
+pystray>=0.19.5
+Pillow>=10.0.0
+
+# テキスト貼り付け
+pyperclip>=1.8.2
+pyautogui>=0.9.54
+
+# GUI設定画面
+# tkinter は標準ライブラリに含まれる
+
+# HTTP (Ollama LLM連携用・オプション)
+requests>=2.31.0
+
+# 設定ファイル
+# configparser は標準ライブラリに含まれる
