@@ -1,0 +1,47 @@
+# 仕様書 §9.3 / §14.5 / §15.2 に対応する既定設定。
+# 値の意味は docs/textbook-scan-spec.md の該当REQ番号を参照。
+
+# --- §14.5 REQ-STORE-01: 保存先フォルダ ---
+output_root: "~/Documents/教科書スキャン"
+per_book_override: true
+
+# --- §9.3 REQ-OCR-01: OCRエンジン構成(メモリ量に応じ tscan doctor が上書きする) ---
+engines:
+  body_text:
+    horizontal: ["apple_vision", "yomitoku"]
+    vertical: ["yomitoku", "apple_vision"]
+    # §9.4 REQ-OCR-04: DeepSeek-OCR系は縦書きには絶対に追加しない
+    deepseek_ocr:
+      enabled: false          # 128GB以上のMacでのみ有効化を検討(§9.4)
+  math:
+    primary: "mathpix"
+    fallback: "texify"
+    local_vlm:
+      enabled: false          # §9.5 REQ-OCR-05: 実測検証前は既定OFF
+
+# --- §15.2 REQ-PERF-04: 並列数(nullなら実行時に自動計算) ---
+performance:
+  workers: null
+  keep_all_stages: false      # §16.1 REQ-NFR-02: trueだとP1〜P10全段階を保持(デバッグ用)
+
+# --- §8.3.1 REQ-PRE-03: セッション校正のヒント探索マージン ---
+preprocess:
+  calibration_search_margin_px: 40
+  aspect_ratio_tolerance: 0.05   # §8.3.2 REQ-PRE-04
+
+# --- §11.3 REQ-QA-04: 信頼度の重み付き幾何平均 ---
+confidence_weights:
+  engine: 3
+  agree: 4
+  penalty: 2
+  context: 1
+
+# --- §11.3 REQ-QA-05 / §11.2 REQ-QA-03: 振り分け閾値 ---
+thresholds:
+  auto_accept: 0.95
+  review_required: 0.80
+  ensemble_full_match: 1.00
+  ensemble_partial_match: 0.95
+
+# --- §16.2 REQ-SEC-03 ---
+offline_mode: false

@@ -1,0 +1,40 @@
+[project]
+name = "tscan"
+version = "0.1.0"
+description = "教科書スキャン・日本語/数式OCRシステム(仕様書 docs/textbook-scan-spec.md の実装)"
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python>=4.9",
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "pillow-heif>=0.16",
+    "rawpy>=0.19",
+    "exifread>=3.0",
+    "sympy>=1.12",
+    "antlr4-python3-runtime==4.11",
+    "typer>=0.12",
+    "rich>=13.7",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "jinja2>=3.1",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+# macOS実機でのみインストール可能(§9.2)。pyobjc は Apple Vision フレームワーク連携に必要。
+apple-vision = ["pyobjc-framework-Vision"]
+# 日本語文書特化OCR(§9.2)。torch等の重い依存を含むため任意インストール。
+yomitoku = ["yomitoku"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+
+[project.scripts]
+tscan = "tscan.cli:app"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
