@@ -11,6 +11,7 @@ from tscan.preprocess import (
     detect_with_hint,
     find_gutter_x,
     flatten_illumination,
+    invert_dark_boxes,
     split_spread,
 )
 
@@ -88,3 +89,44 @@ def test_find_gutter_x_and_split_spread():
 
     left, right = split_spread(image)
     assert left.shape[1] + right.shape[1] == width
+
+
+# --- P6.5: 白抜き文字のボックス反転 ------------------------------------------
+
+
+def _page_with_formula_box() -> np.ndarray:
+    """白い紙に、黒文字の本文と「濃色の帯に白文字」の公式ボックスを置いたページ。"""
+    gray = np.full((600, 500), 240, dtype=np.uint8)
+    cv2.putText(gray, "body text", (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.2, 20, 3)
+    cv2.rectangle(gray, (40, 200), (460, 320), 60, -1)  # 濃い帯
+    cv2.putText(gray, "E = mc2", (80, 280), cv2.FONT_HERSHEY_SIMPLEX, 2.0, 250, 4)  # 白抜き
+    return gray
+
+
+def test_invert_dark_boxes_turns_white_text_into_dark_text():
+    gray = _page_with_formula_box()
+    out, boxes = invert_dark_boxes(gray)
+    assert boxes == 1
+    # 帯の内側は明るくなり、白抜き文字は暗くなる
+    assert out[210, 60] > 150  # 帯の地
+    assert out[245:275, 100:400].min() < 60  # 文字
+    # 本文の黒文字はそのまま
+    assert out[:150].min() < 60
+
+
+def test_invert_dark_boxes_ignores_line_drawings():
+    """罫線だけの表や線画は塗りつぶし率が低いので反転しない。"""
+    gray = np.full((600, 500), 240, dtype=np.uint8)
+    cv2.rectangle(gray, (40, 200), (460, 320), 20, 3)  # 枠線だけ
+    _out, boxes = invert_dark_boxes(gray)
+    assert boxes == 0
+
+
+def test_flatten_illumination_keeps_contrast_inside_dark_figure():
+    """暗い図版の内側で背景推定が小さくなり、ノイズが白飛びするのを防ぐ。"""
+    gray = np.full((300, 300), 230, dtype=np.uint8)
+    gray[100:200, 100:200] = 40  # 暗い写真
+    gray[150, 150] = 60  # 写真の中のわずかに明るい点
+    out = flatten_illumination(gray)
+    assert out[150, 150] < 160  # 割り算で255付近まで持ち上がらない
+    assert out[50, 50] > 240  # 紙は白のまま

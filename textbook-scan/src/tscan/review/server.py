@@ -186,6 +186,9 @@ def page_grid(book_id: str, filter: str = "all") -> HTMLResponse:
             icon, color, label = "✅", "var(--ok)", "確認済み"
 
         nombre = f"p.{page.printed_number}" if page.printed_number else ""
+        side = {"left": "見開き・左", "right": "見開き・右"}.get(page.spread_side or "", "")
+        if side:
+            nombre = f"{nombre} {side}".strip()
         cards.append(
             f"""<a class="card" href="/book/{book_id}/page/{i}">
                   <img src="/api/{book_id}/image/{i}" loading="lazy" alt="page {i}">

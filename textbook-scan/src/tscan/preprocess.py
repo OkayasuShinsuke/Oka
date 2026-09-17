@@ -249,11 +249,64 @@ def split_spread(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 # ---------------------------------------------------------------------------
 
 
-def flatten_illumination(gray: np.ndarray, kernel_size: int = 51) -> np.ndarray:
-    """照明ムラを除去して、紙の白さを均一にする(P7)。"""
+def invert_dark_boxes(
+    gray: np.ndarray, min_area_frac: float = 0.003, min_height_frac: float = 0.04, min_fill: float = 0.6
+) -> tuple[np.ndarray, int]:
+    """白抜き文字の「暗い帯・ボックス」(公式の囲み、章見出しの帯)を反転して黒文字にする(P6.5)。
+
+    教科書は重要な公式を色付きのボックスに白文字で載せることが多い。OCRは「明るい紙に暗い文字」
+    を前提にしているので、そのままでは読めない。暗くて矩形に近い大きな塊を見つけ、その内側だけ
+    明暗を反転する。
+
+    ボックスと間違えやすいものの除外:
+        - 本文の太い1行: 高さがページの min_height_frac 未満(本文1行は 2〜3%)
+        - 線画・表の罫線: 外接矩形に対する暗い画素の割合が低い
+        - 前処理に失敗した真っ暗な画像: 画像全体が1つの塊
+
+    戻り値: (画像, 反転したボックスの数)
+    """
+    h, w = gray.shape[:2]
+    _, dark = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+    closed = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)))
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(closed)
+    out = gray.copy()
+    boxes = 0
+    for i in range(1, count):
+        x, y, bw, bh, area = stats[i]
+        if area < h * w * min_area_frac or bh < h * min_height_frac or bw < 12:
+            continue
+        if bw >= w - 2 and bh >= h - 2:
+            continue  # 画像全体が暗い(前処理失敗)
+        raw_fill = float((dark[y : y + bh, x : x + bw] > 0).mean())
+        if raw_fill < min_fill:
+            continue  # 線画・表の罫線・文字の集まり
+        # 成分の外側の輪郭で塗りつぶす(白抜き文字の穴も含めて反転する。角丸にも追従)
+        component = (labels[y : y + bh, x : x + bw] == i).astype(np.uint8)
+        contours, _ = cv2.findContours(component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        region = np.zeros_like(component)
+        cv2.drawContours(region, contours, -1, 1, thickness=cv2.FILLED)
+        patch = out[y : y + bh, x : x + bw]
+        patch[region > 0] = 255 - patch[region > 0]
+        boxes += 1
+    return out, boxes
+
+
+def flatten_illumination(
+    gray: np.ndarray, kernel_size: int | None = None, min_background_ratio: float = 0.6
+) -> np.ndarray:
+    """照明ムラを除去して、紙の白さを均一にする(P7)。
+
+    背景(紙の明るさ)の推定は「文字より大きく、照明ムラより小さい」核で行う。核は画像の
+    短辺の 1/16 を既定にする(固定51pxでは高解像度画像で文字の塊まで背景に取り込む)。
+    暗い図版の内側で背景推定値が小さくなり、割り算でノイズが増幅されるのを防ぐため、
+    背景は紙の明るさの 60% を下限にする。
+    """
+    if kernel_size is None:
+        kernel_size = max(51, (min(gray.shape[:2]) // 16) | 1)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
     background = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
-    background = np.clip(background, 1, 255)  # 0除算防止
+    paper_level = float(np.percentile(background, 90))
+    background = np.clip(background, max(1.0, paper_level * min_background_ratio), 255).astype(np.uint8)
     normalized = cv2.divide(gray, background, scale=255)
     return normalized
 

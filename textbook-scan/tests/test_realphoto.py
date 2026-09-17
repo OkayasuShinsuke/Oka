@@ -1,0 +1,168 @@
+"""実写真向けの紙面検出・見開き分割のテスト(仕様書 §8 の拡張、realphoto)。
+
+合成画像で「木の机(茶)+ピンクの籠の上に見開きの本を置き、指で押さえた」状況を再現する。
+"""
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+cv2 = pytest.importorskip("cv2")
+
+from tscan.models import Book, Page
+from tscan.pipeline import expand_spreads
+from tscan.realphoto import (
+    analyze_spread,
+    dense_span,
+    detect_spread,
+    extract_page,
+    paper_mask_hsv,
+    split_spread_photo,
+)
+
+
+def _text_lines(canvas: np.ndarray, x0: int, x1: int, y0: int, y1: int, pitch: int = 24) -> None:
+    """本文の行を「細長い黒い帯」で模す(OCRは掛けないので文字である必要はない)。"""
+    for y in range(y0, y1, pitch):
+        cv2.rectangle(canvas, (x0, y), (x1, y + 8), (30, 30, 30), -1)
+
+
+def _spread_photo(w: int = 1200, h: int = 900, with_box: bool = True) -> np.ndarray:
+    """机(茶)+籠(ピンク)の上の見開き。左右ページに本文、右ページに青い数式ボックス。"""
+    canvas = np.full((h, w, 3), (40, 90, 140), np.uint8)  # 木の机(BGR 茶色)
+    cv2.rectangle(canvas, (0, 0), (w, 120), (180, 120, 230), -1)  # ピンクの籠
+    cv2.rectangle(canvas, (100, 140), (w - 100, h - 60), (235, 240, 245), -1)  # 紙(暖色照明)
+    # 左ページ本文
+    _text_lines(canvas, 150, 560, 200, h - 160)
+    # 右ページ本文(ノドの右側に本文の谷を挟む)
+    _text_lines(canvas, 640, w - 150, 200, h - 160)
+    if with_box:
+        cv2.rectangle(canvas, (680, 300), (w - 200, 380), (200, 120, 40), -1)  # 青い公式ボックス
+    # 指(肌色)が下端から紙面に入り込む
+    cv2.ellipse(canvas, (300, h - 40), (40, 90), 0, 0, 360, (130, 160, 205), -1)
+    return canvas
+
+
+def _single_photo() -> np.ndarray:
+    canvas = np.full((900, 800, 3), (40, 90, 140), np.uint8)
+    cv2.rectangle(canvas, (120, 60), (680, 840), (235, 240, 245), -1)  # B5に近い縦長(0.72)
+    _text_lines(canvas, 170, 630, 150, 760)
+    return canvas
+
+
+# --- 紙面の検出 --------------------------------------------------------------
+
+
+def test_paper_mask_excludes_desk_and_basket():
+    mask = paper_mask_hsv(_spread_photo())
+    assert mask is not None
+    assert mask[50, 600] == 0  # 籠
+    assert mask[850, 30] == 0  # 机
+    assert mask[450, 600] == 255  # 紙
+
+
+def test_paper_mask_keeps_saturated_boxes_inside_page():
+    """青い公式ボックスは彩度が高いが、紙面の内側にあるので紙面として残す。"""
+    mask = paper_mask_hsv(_spread_photo(with_box=True))
+    assert mask is not None
+    assert mask[340, 800] == 255
+
+
+def test_paper_mask_returns_none_without_paper():
+    desk = np.full((300, 300, 3), (40, 90, 140), np.uint8)
+    assert paper_mask_hsv(desk) is None
+
+
+# --- 密度プロファイル --------------------------------------------------------
+
+
+def test_dense_span_picks_longest_run_and_bridges_gaps():
+    profile = np.zeros(200)
+    profile[10:20] = 5  # 縁のノイズ(短い)
+    profile[50:100] = 50
+    profile[110:150] = 50  # 10の途切れは繋がる
+    span = dense_span(profile, fraction=0.1, min_gap=20)
+    assert span is not None
+    assert abs(span[0] - 50) <= 2 and abs(span[1] - 150) <= 2  # 形態学処理の丸めで±1ずれうる
+
+
+def test_dense_span_empty():
+    assert dense_span(np.zeros(10)) is None
+
+
+# --- 見開きの解析と分割 ------------------------------------------------------
+
+
+def test_analyze_spread_finds_gutter_between_pages():
+    layout = analyze_spread(_spread_photo())
+    assert layout is not None
+    assert layout.gutter_x is not None
+    assert 560 < layout.gutter_x < 640
+
+
+def test_analyze_single_page_has_no_gutter():
+    layout = analyze_spread(_single_photo())
+    assert layout is not None
+    assert layout.gutter_x is None
+
+
+def test_split_spread_photo_returns_two_pages_with_masks():
+    pages = split_spread_photo(_spread_photo())
+    assert pages is not None and len(pages) == 2
+    for image, mask in pages:
+        assert image.shape[:2] == mask.shape[:2]
+        assert image.shape[1] < 800  # 片側だけ
+
+
+def test_split_paints_outside_paper_with_paper_color():
+    """切り出した画像で、指や机だった場所は紙の地色になっている。"""
+    (left, mask), _right = split_spread_photo(_spread_photo())
+    outside = left[mask == 0]
+    assert outside.size > 0
+    assert outside.mean() > 200  # 暗い机の色ではない
+
+
+def test_detect_spread_and_extract_page_sides():
+    photo = _spread_photo()
+    assert detect_spread(photo) == "spread"
+    assert detect_spread(_single_photo()) == "single"
+
+    left = extract_page(photo, "left")
+    right = extract_page(photo, "right")
+    assert left is not None and right is not None
+    # 右ページの切り出しに青いボックスが含まれる(BGRのB成分が高い画素がある)
+    r_img, _ = right
+    assert (r_img[..., 0].astype(int) - r_img[..., 2].astype(int) > 100).any()
+    l_img, _ = left
+    assert not (l_img[..., 0].astype(int) - l_img[..., 2].astype(int) > 100).any()
+
+
+# --- パイプラインでの見開き展開 ----------------------------------------------
+
+
+def test_expand_spreads_inserts_right_page_after_left(tmp_path):
+    spread_path = tmp_path / "spread.png"
+    single_path = tmp_path / "single.png"
+    cv2.imwrite(str(spread_path), _spread_photo())
+    cv2.imwrite(str(single_path), _single_photo())
+
+    book = Book(book_id="t", pages=[Page.new(str(spread_path), 1000.0), Page.new(str(single_path), 2000.0)])
+    added = expand_spreads(book, workers=1)
+
+    assert added == 1
+    ordered = sorted(book.pages, key=lambda p: p.order_key)
+    assert [p.spread_side for p in ordered] == ["left", "right", "single"]
+    assert ordered[0].image_path == ordered[1].image_path
+    assert 1000.0 < ordered[1].order_key < 2000.0  # 他のページの order_key は動かない
+    assert ordered[0].page_id != ordered[1].page_id
+
+    # 2回目は何も追加しない(判定済み)
+    assert expand_spreads(book, workers=1) == 0
+
+
+def test_expand_spreads_leaves_undetectable_photo_unmarked(tmp_path):
+    path = tmp_path / "desk.png"
+    cv2.imwrite(str(path), np.full((300, 300, 3), (40, 90, 140), np.uint8))
+    book = Book(book_id="t", pages=[Page.new(str(path), 1000.0)])
+    assert expand_spreads(book, workers=1) == 0
+    assert book.pages[0].spread_side is None  # 従来経路に任せる

@@ -70,6 +70,9 @@ class Page:
     deleted: bool = False  # 論理削除フラグ(§7.7.3)
     warnings: list[str] = field(default_factory=list)
     blocks: list[Block] = field(default_factory=list)
+    # 見開き写真のどちら側か: "left" | "right" | "single"。None は未判定(§8.4 見開き分割)。
+    # 見開き1枚から左右2つの Page が作られ、両方が同じ image_path を指す
+    spread_side: str | None = None
 
     @property
     def needs_review(self) -> bool:

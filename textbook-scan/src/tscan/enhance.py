@@ -168,7 +168,10 @@ def estimate_curl(image: np.ndarray) -> float:
 
 
 def dewarp_page(
-    image: np.ndarray, output_size: tuple[int, int] | None = None, inset: float = 0.015
+    image: np.ndarray,
+    output_size: tuple[int, int] | None = None,
+    inset: float = 0.015,
+    mask: np.ndarray | None = None,
 ) -> np.ndarray | None:
     """ページの湾曲を平らに戻す(円筒展開)。補正できなければ None。
 
@@ -179,7 +182,8 @@ def dewarp_page(
         3. 横方向: 上端曲線の「弧の長さ」を出力のx座標にする
            → 円筒を転がして広げたことになり、ノド付近の横圧縮が戻る
     """
-    mask = page_mask(image)
+    if mask is None:
+        mask = page_mask(image)
     if mask is None:
         return None
     traced = trace_page_edges(mask)

@@ -19,8 +19,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from tscan import enhance, layout, preprocess
-from tscan.models import Block, BlockKind, Book, Page
+from tscan import enhance, layout, preprocess, realphoto
+from tscan.models import Block, BlockKind, Book, Page, insert_between
 from tscan.ocr.registry import EngineSet, build_math_engines, build_text_engines
 from tscan.verify import VerifyThresholds, load_lexicon, verify_block
 
@@ -57,6 +57,9 @@ class PipelineContext:
     # ブック型スキャナ相当の補正(§8 拡張: 指の除去・湾曲補正・背景消去)
     enhance: bool = True
     curl_threshold: float = 0.0
+    # 実写真モード: 背景の色に依存しない紙面検出と見開きの自動分割(realphoto)。
+    # 検出できなかった写真は従来の経路(enhance + 4隅検出)に落ちる
+    real_photo: bool = True
 
     @property
     def work_dir(self) -> Path:
@@ -64,6 +67,13 @@ class PipelineContext:
 
     def stage_dir(self, stage: str) -> Path:
         return self.work_dir / "stages" / stage
+
+
+# 前処理が付ける警告。前処理をやり直すときに古いものを消すための接頭辞一覧
+_PREPROCESS_WARNINGS = (
+    "ASPECT_RATIO_ANOMALY", "PAGE_CORNERS_NOT_FOUND", "DEWARPED", "DEWARP_SKIPPED", "FINGERS_REMOVED",
+    "DARK_BOXES_INVERTED",
+)
 
 
 @dataclass
@@ -84,46 +94,68 @@ def preprocess_page(page: Page, ctx: PipelineContext, page_index: int) -> tuple[
 
     image = preprocess.load_as_bgr(Path(page.image_path))  # P1
 
-    # P2.5: ブック型スキャナ相当の補正(指の除去・湾曲補正・背景消去)
-    # 指はページの輪郭を隠すため、4隅検出より先に消す必要がある。
+    # P2: 実写真モード(手持ち・見開き・雑多な背景)。紙面を「明るくて彩度が低い領域」と
+    # 「文字行の密度」で捉え、見開きなら指定された側だけを切り出す。
+    # 紙面の外(机・手)は紙の地色で塗られ、湾曲補正には紙面マスクをそのまま渡す。
+    extracted = None
+    if ctx.enhance and ctx.real_photo:
+        extracted = realphoto.extract_page(image, page.spread_side)
+
     dewarped = False
-    if ctx.enhance:
-        image, info = enhance.enhance_book_photo(
-            image, do_dewarp=True, do_finger_removal=True, do_background=False,
-            curl_threshold=ctx.curl_threshold,
-        )
-        dewarped = bool(info["dewarped"])
-        if info["fingers_removed"]:
-            warnings.append(f"FINGERS_REMOVED:{info['fingers_removed']}")
-        if dewarped:
-            warnings.append(f"DEWARPED:{info['curl']}")
-
-    if dewarped:
-        # 湾曲補正は紙面の切り出しと矩形化まで済ませているため、台形補正は行わない
-        warped = image
-        if not preprocess.check_aspect_ratio(warped, ctx.expected_ratio, ctx.aspect_tolerance):
-            warnings.append("ASPECT_RATIO_ANOMALY")
-    else:
-        # P3-P4: セッション校正のヒントを使った4隅検出 + 台形補正(§8.3.1)
-        if ctx.calibration is not None:
-            corners = preprocess.detect_with_hint(image, ctx.calibration, ctx.search_margin_px)
+    if extracted is not None:
+        crop, mask = extracted
+        result = enhance.dewarp_page(crop, mask=mask) if ctx.enhance else None
+        if result is not None:
+            warped = result
+            dewarped = True
+            warnings.append("DEWARPED:real")
         else:
-            corners = preprocess.detect_page_corners(image)
+            warped = crop
+            warnings.append("DEWARP_SKIPPED")
+        # 切り出しは本文範囲を基準にしているので、物理的なページの縦横比は検査しない
+    else:
+        # P2.5: ブック型スキャナ相当の補正(指の除去・湾曲補正・背景消去)
+        # 指はページの輪郭を隠すため、4隅検出より先に消す必要がある。
+        if ctx.enhance:
+            image, info = enhance.enhance_book_photo(
+                image, do_dewarp=True, do_finger_removal=True, do_background=False,
+                curl_threshold=ctx.curl_threshold,
+            )
+            dewarped = bool(info["dewarped"])
+            if info["fingers_removed"]:
+                warnings.append(f"FINGERS_REMOVED:{info['fingers_removed']}")
+            if dewarped:
+                warnings.append(f"DEWARPED:{info['curl']}")
 
-        if corners is not None:
-            warped = preprocess.correct_perspective(image, corners)
-            # §8.3.2 REQ-PRE-04: 補正結果の自動検査
+        if dewarped:
+            # 湾曲補正は紙面の切り出しと矩形化まで済ませているため、台形補正は行わない
+            warped = image
             if not preprocess.check_aspect_ratio(warped, ctx.expected_ratio, ctx.aspect_tolerance):
                 warnings.append("ASPECT_RATIO_ANOMALY")
         else:
-            warped = image
-            warnings.append("PAGE_CORNERS_NOT_FOUND")
+            # P3-P4: セッション校正のヒントを使った4隅検出 + 台形補正(§8.3.1)
+            if ctx.calibration is not None:
+                corners = preprocess.detect_with_hint(image, ctx.calibration, ctx.search_margin_px)
+            else:
+                corners = preprocess.detect_page_corners(image)
+
+            if corners is not None:
+                warped = preprocess.correct_perspective(image, corners)
+                # §8.3.2 REQ-PRE-04: 補正結果の自動検査
+                if not preprocess.check_aspect_ratio(warped, ctx.expected_ratio, ctx.aspect_tolerance):
+                    warnings.append("ASPECT_RATIO_ANOMALY")
+            else:
+                warped = image
+                warnings.append("PAGE_CORNERS_NOT_FOUND")
 
     if ctx.enhance:
         warped = enhance.clean_background(warped)  # 紙面の外に残った机・マットを白で消す
 
     gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY) if warped.ndim == 3 else warped
     gray = preprocess.deskew(gray)  # P5
+    gray, boxes = preprocess.invert_dark_boxes(gray)  # P6.5: 白抜きの公式ボックスを黒文字に
+    if boxes:
+        warnings.append(f"DARK_BOXES_INVERTED:{boxes}")
     gray = preprocess.flatten_illumination(gray)  # P7
     gray = preprocess.denoise_and_sharpen(gray)  # P8
     return gray, warnings
@@ -234,7 +266,7 @@ def process_page(
             gray, warnings = preprocess_page(page, ctx, page_index)
             preprocessed_path.parent.mkdir(parents=True, exist_ok=True)
             cv2.imwrite(str(preprocessed_path), gray)
-            page.warnings = [w for w in page.warnings if w not in ("ASPECT_RATIO_ANOMALY", "PAGE_CORNERS_NOT_FOUND")]
+            page.warnings = [w for w in page.warnings if not w.startswith(_PREPROCESS_WARNINGS)]
             page.warnings.extend(warnings)
         else:
             gray = cv2.imread(str(preprocessed_path), cv2.IMREAD_GRAYSCALE)
@@ -298,6 +330,44 @@ def default_workers() -> int:
     return max(1, min(cpu - 1, cpu // 2 + 1))
 
 
+def expand_spreads(book: Book, workers: int = 1) -> int:
+    """見開き写真を左右2つの Page に分ける(§8.4 見開き分割)。追加したページ数を返す。
+
+    未判定(spread_side=None)の写真だけを調べる。見開きなら元の Page を左ページとし、
+    同じ写真を指す右ページを直後に挿入する(order_key は間の値。他のページは触らない)。
+    1ページ写真は "single" と記録し、次回以降は調べない。
+    """
+    targets = [p for p in book.pages if not p.deleted and p.spread_side is None]
+    if not targets:
+        return 0
+
+    def _kind(page: Page) -> str | None:
+        try:
+            return realphoto.detect_spread(preprocess.load_as_bgr(Path(page.image_path)))
+        except Exception:  # noqa: BLE001 — 読めない写真は後段の処理で失敗として報告される
+            return None
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        kinds = list(pool.map(_kind, targets))
+
+    added = 0
+    ordered = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
+    for page, kind in zip(targets, kinds):
+        if kind == "spread":
+            page.spread_side = "left"
+            pos = ordered.index(page)
+            next_key = ordered[pos + 1].order_key if pos + 1 < len(ordered) else page.order_key + 1000.0
+            right = Page.new(page.image_path, insert_between(page.order_key, next_key))
+            right.spread_side = "right"
+            book.pages.append(right)
+            ordered.insert(pos + 1, right)
+            added += 1
+        elif kind == "single":
+            page.spread_side = "single"
+        # None: 紙面を検出できない写真。従来経路で処理するため未判定のまま残す
+    return added
+
+
 def run_book(
     book: Book,
     ctx: PipelineContext,
@@ -311,9 +381,12 @@ def run_book(
     math_engines = build_math_engines(offline=ctx.offline)
     lexicon = load_lexicon(ctx.subject)
 
+    workers = workers or default_workers()
+    if from_stage == Stage.PREPROCESS and ctx.enhance and ctx.real_photo:
+        expand_spreads(book, workers=workers)
+
     visible = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
     indexed = list(enumerate(visible, start=1))
-    workers = workers or default_workers()
 
     results: list[PageResult] = []
     failures: list[str] = []
