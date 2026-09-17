@@ -21,7 +21,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      # OCRエンジンと日本語フォント。無くてもテストは通る(該当テストはスキップされる)が、
+      # 入れておくことでOCRを伴うテストまで実行できる(§9.2)
+      - name: Install Tesseract and Japanese fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-jpn tesseract-ocr-jpn-vert \
+                                  fonts-ipafont-gothic
+
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" pytesseract pymupdf
+
       - name: Run tests
         run: pytest tests/ -v

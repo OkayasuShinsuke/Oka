@@ -17,3 +17,6 @@ fastapi>=0.110
 uvicorn>=0.29
 jinja2>=3.1
 requests>=2.31
+pytesseract>=0.3.10
+pymupdf>=1.24
+img2pdf>=0.5

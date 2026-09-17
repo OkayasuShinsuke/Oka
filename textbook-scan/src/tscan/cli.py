@@ -2,29 +2,18 @@
 from __future__ import annotations
 
 import shutil
-import sys
 from datetime import datetime
 from pathlib import Path
 
-import cv2
 import typer
 from rich.console import Console
-from rich.progress import track
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+from rich.table import Table
 
 from tscan.config import load_config
 from tscan.ingest import detect_page_gaps, rename_by_shot_time
 from tscan.models import Book, Page, compute_display_page_index, insert_between
-from tscan.preprocess import (
-    calibrate_session,
-    check_aspect_ratio,
-    denoise_and_sharpen,
-    deskew,
-    detect_with_hint,
-    flatten_illumination,
-    load_as_bgr,
-    correct_perspective,
-    save_stage,
-)
+from tscan.pipeline import PipelineContext, Stage, default_workers, load_calibration, run_book
 
 app = typer.Typer(help="教科書スキャン・日本語/数式OCRシステム(docs/textbook-scan-spec.md 実装)")
 pages_app = typer.Typer(help="ページ管理(§7.7)")
@@ -32,9 +21,13 @@ app.add_typer(pages_app, name="pages")
 console = Console()
 
 
+# ---------------------------------------------------------------------------
+# 共通ヘルパ
+# ---------------------------------------------------------------------------
+
+
 def _book_dir(book_id: str, output_dir: str | None) -> Path:
-    config = load_config()
-    root = Path(output_dir).expanduser() if output_dir else config.resolved_output_root()
+    root = Path(output_dir).expanduser() if output_dir else load_config().resolved_output_root()
     return root / book_id
 
 
@@ -44,6 +37,19 @@ def _load_book(book_id: str, output_dir: str | None) -> Book:
         console.print(f"[red]本 '{book_id}' が見つかりません: {book_json}[/red]")
         raise typer.Exit(code=1)
     return Book.load(book_json)
+
+
+def _resolve_page(book: Book, number: int) -> Page:
+    pages = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
+    if not 1 <= number <= len(pages):
+        console.print(f"[red]ページ番号{number}が見つかりません(1〜{len(pages)})[/red]")
+        raise typer.Exit(code=1)
+    return pages[number - 1]
+
+
+# ---------------------------------------------------------------------------
+# ① 取り込み
+# ---------------------------------------------------------------------------
 
 
 @app.command()
@@ -62,38 +68,33 @@ def ingest(
         console.print(f"[yellow]対応する画像が見つかりませんでした: {src_dir}[/yellow]")
         raise typer.Exit(code=1)
 
-    order_key = 1000.0
-    pages = []
-    for path in created:
-        pages.append(Page.new(image_path=str(path), order_key=order_key))
-        order_key += 1000.0
-
-    book = Book(
-        book_id=book_id,
-        title=title,
-        created_at=datetime.now().isoformat(),
-        pages=pages,
-    )
+    pages = [Page.new(image_path=str(p), order_key=1000.0 * (i + 1)) for i, p in enumerate(created)]
+    book = Book(book_id=book_id, title=title, created_at=datetime.now().isoformat(), pages=pages)
     book_root.mkdir(parents=True, exist_ok=True)
     book.save(book_root / "book.json")
 
     console.print(f"[green]✓[/green] {len(created)}ページを取り込みました → {book_root}")
+    console.print("  次: [bold]tscan calibrate[/bold] で4隅を確認 → [bold]tscan run[/bold] で処理")
+
+
+# ---------------------------------------------------------------------------
+# ①' セッション校正(§8.3.1)
+# ---------------------------------------------------------------------------
 
 
 @app.command()
 def calibrate(
     book_id: str = typer.Argument(...),
-    frame: str = typer.Option("p0001", "--frame", help="校正に使うページ(例: p0001)"),
+    frame: int = typer.Option(1, "--frame", help="校正に使うページ番号(既定: 1ページ目)"),
     output_dir: str | None = typer.Option(None, "--output-dir"),
 ) -> None:
     """セッション校正(§8.3.1 REQ-PRE-03)。最初の1枚から4隅を検出する。"""
-    book = _load_book(book_id, output_dir)
-    target = next((p for p in book.pages if frame in p.image_path), None)
-    if target is None:
-        console.print(f"[red]ページが見つかりません: {frame}[/red]")
-        raise typer.Exit(code=1)
+    from tscan.preprocess import calibrate_session, load_as_bgr
 
-    image = load_as_bgr(Path(target.image_path))
+    book = _load_book(book_id, output_dir)
+    page = _resolve_page(book, frame)
+
+    image = load_as_bgr(Path(page.image_path))
     corners = calibrate_session(image)
     if corners is None:
         console.print("[red]4隅を検出できませんでした。照明・背景マットを確認してください(§6.3)。[/red]")
@@ -102,177 +103,237 @@ def calibrate(
     calib_path = _book_dir(book_id, output_dir) / "work" / "calibration.txt"
     calib_path.parent.mkdir(parents=True, exist_ok=True)
     calib_path.write_text("\n".join(f"{x},{y}" for x, y in corners), encoding="utf-8")
+
     console.print(f"[green]✓[/green] 校正結果を保存しました: {calib_path}")
-    console.print(f"検出した4隅: {corners.tolist()}")
-    console.print("[yellow]ズレていれば§11.7の編集画面(未実装)で手動修正してから再実行してください。[/yellow]")
+    console.print(f"  検出した4隅: {[[round(v, 1) for v in c] for c in corners.tolist()]}")
+    console.print("  [dim]ズレていればレビューUI(§11.7)で確認するか、このファイルを直接編集してください[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# ② パイプライン実行
+# ---------------------------------------------------------------------------
 
 
 @app.command()
 def run(
     book_id: str = typer.Argument(...),
     output_dir: str | None = typer.Option(None, "--output-dir"),
+    from_stage: str = typer.Option("preprocess", "--from", help="再開する工程: preprocess | ocr | verify"),
+    workers: int | None = typer.Option(None, "--workers", help="並列数(既定はCPUに応じて自動)"),
+    subject: str = typer.Option("physics", "--subject", help="文脈辞書の分野: physics | math | kokugo(§11.6)"),
     expected_ratio: float = typer.Option(182 / 257, "--expected-ratio", help="§8.3.2 想定縦横比(既定B5)"),
+    offline: bool = typer.Option(False, "--offline", help="外部APIを使わない(§16.2 REQ-SEC-03)"),
 ) -> None:
-    """前処理パイプライン(§8)を実行する。
+    """前処理→OCR→レイアウト解析→検証を実行する(§8〜§11)。"""
+    try:
+        stage = Stage(from_stage)
+    except ValueError:
+        console.print("[red]--from には preprocess / ocr / verify のいずれかを指定してください[/red]")
+        raise typer.Exit(code=1)
 
-    現時点で実装済み: P1(読込)・P3-P4(校正+台形補正)・P5(デスキュー)・
-    P7(照明ムラ補正)・P8(ノイズ除去)・P10(保存)・§8.3.2(自動検査)。
-    未実装(要macOS実機/APIキー): §9のOCR、§10のレイアウト解析、§11の検証。
-    """
     book = _load_book(book_id, output_dir)
     book_root = _book_dir(book_id, output_dir)
+    config = load_config()
 
-    calib_path = book_root / "work" / "calibration.txt"
-    hint_corners = None
-    if calib_path.exists():
-        import numpy as np
+    ctx = PipelineContext(
+        book_id=book_id,
+        book_root=book_root,
+        expected_ratio=expected_ratio,
+        aspect_tolerance=config.preprocess.aspect_ratio_tolerance,
+        calibration=load_calibration(book_root),
+        subject=subject,
+        offline=offline,
+        search_margin_px=config.preprocess.calibration_search_margin_px,
+    )
+    if ctx.calibration is None:
+        console.print("[yellow]セッション校正が未実行です。`tscan calibrate` を推奨します(§8.3.1)。[/yellow]")
 
-        lines = calib_path.read_text(encoding="utf-8").splitlines()
-        hint_corners = np.array([[float(v) for v in ln.split(",")] for ln in lines], dtype="float32")
-    else:
-        console.print("[yellow]セッション校正がまだ行われていません。`tscan calibrate` の実行を推奨します(§8.3.1)。[/yellow]")
+    n_workers = workers or default_workers()
+    visible = [p for p in book.pages if not p.deleted]
+    console.print(f"[bold]{len(visible)}ページ[/bold] を処理します(並列数 {n_workers}、工程 {stage.value} から)")
 
-    visible = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
-    display_index = compute_display_page_index(book.pages)
-
-    failed: list[str] = []
-    for page in track(visible, description="前処理中(P1-P10相当)"):
-        try:
-            image = load_as_bgr(Path(page.image_path))
-            corners = detect_with_hint(image, hint_corners) if hint_corners is not None else None
-            if corners is not None:
-                warped = correct_perspective(image, corners)
-                if not check_aspect_ratio(warped, expected_ratio):
-                    page.warnings.append("ASPECT_RATIO_ANOMALY")  # §8.3.2 REQ-PRE-04
-            else:
-                warped = image
-
-            gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-            gray = deskew(gray)
-            gray = flatten_illumination(gray)
-            gray = denoise_and_sharpen(gray)
-
-            save_stage(gray, book_root / "work", book_id, display_index[page.page_id], "preprocessed")
-        except Exception as e:  # noqa: BLE001 — 1ページの失敗で全体を止めない(REQ-NFR-04)
-            failed.append(f"{Path(page.image_path).name}: {e}")
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
+        BarColumn(), TextColumn("{task.completed}/{task.total}"), TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("処理中", total=len(visible))
+        results, failures = run_book(
+            book, ctx, from_stage=stage, workers=n_workers, progress=lambda: progress.advance(task)
+        )
 
     book.save(book_root / "book.json")
 
-    if failed:
-        console.print(f"[yellow]前処理に失敗したページ: {len(failed)}件[/yellow]")
-        for msg in failed:
+    blocks = [b for p in book.pages for b in p.blocks]
+    if blocks:
+        pending = sum(1 for b in blocks if b.review_status == "pending")
+        rate = pending / len(blocks) * 100
+        console.print(f"[green]✓[/green] 完了: {len(blocks)}ブロック抽出 / 要確認 {pending}件 ({rate:.1f}%)")
+    else:
+        console.print("[yellow]ブロックが抽出されませんでした(画像・エンジン設定を確認してください)[/yellow]")
+    if failures:
+        console.print(f"[yellow]失敗したページ: {len(failures)}件[/yellow]")
+        for msg in failures[:10]:
             console.print(f"  - {msg}")
-    console.print(f"[green]✓[/green] 前処理完了。OCR以降(§9-§11)は別途エンジン設定が必要です。")
+    console.print("  次: [bold]tscan review[/bold] で確認 → [bold]tscan export[/bold] で出力")
+
+
+# ---------------------------------------------------------------------------
+# ページ抜けチェック(§7.5)
+# ---------------------------------------------------------------------------
 
 
 @app.command()
 def check(book_id: str = typer.Argument(...), output_dir: str | None = typer.Option(None, "--output-dir")) -> None:
-    """ページ抜け・重複のチェックのみ(§7.5.1 REQ-PAGECHK-02)。"""
+    """ページ抜け・重複のチェック(§7.5.1 REQ-PAGECHK-02: 機材を片付ける前に実行する)。"""
     book = _load_book(book_id, output_dir)
     visible = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
     nombres = [p.printed_number for p in visible]
 
     if all(n is None for n in nombres):
-        console.print(
-            "[yellow]ノンブルが未設定です。ノンブルOCR(§9)が未実装のため、"
-            "現時点ではPage.printed_numberを手動設定するか、実装後に再実行してください。[/yellow]"
-        )
-        return
+        console.print("[yellow]ノンブルが1つも読めていません。`tscan run` を先に実行してください。[/yellow]")
+        raise typer.Exit(code=1)
 
     issues = detect_page_gaps(nombres)
     if not issues:
-        console.print("[green]✓ ページ抜け・重複は検出されませんでした[/green]")
-    else:
-        console.print(f"[yellow]{len(issues)}件の警告があります:[/yellow]")
-        for msg in issues:
-            console.print(f"  - {msg}")
+        console.print(f"[green]✓ {len(visible)}ページ: ページ抜け・重複は検出されませんでした[/green]")
+        return
+
+    console.print(f"[yellow]{len(issues)}件の警告があります:[/yellow]")
+    for msg in issues:
+        console.print(f"  - {msg}")
+    console.print("  [dim]機材がまだセットされているうちに撮り直すことを推奨します(§7.5.1)[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# 診断
+# ---------------------------------------------------------------------------
 
 
 @app.command()
 def doctor() -> None:
-    """依存関係・APIキー・保存先の空き容量を診断する(§14.4)。"""
+    """依存関係・OCRエンジン・保存先の空き容量を診断する(§14.4)。"""
     import importlib
-    import os
     import platform
 
-    console.print("[bold]tscan doctor[/bold]")
-    console.print(f"OS: {platform.system()} {platform.release()}")
+    from tscan.ocr.registry import describe_availability
 
-    for mod in ["cv2", "numpy", "PIL", "pillow_heif", "rawpy", "sympy", "fastapi", "typer"]:
+    console.print("[bold]tscan doctor[/bold]")
+    console.print(f"OS: {platform.system()} {platform.release()} / Python {platform.python_version()}")
+
+    lib_table = Table("ライブラリ", "状態", title="依存ライブラリ(§14.2)")
+    for mod in ["cv2", "numpy", "PIL", "pillow_heif", "rawpy", "sympy", "fastapi", "typer", "pymupdf", "pytesseract"]:
         try:
             importlib.import_module(mod)
-            console.print(f"  [green]✓[/green] {mod}")
+            lib_table.add_row(mod, "[green]✓ 利用可能[/green]")
         except ImportError:
-            console.print(f"  [red]✗[/red] {mod} 未インストール")
+            lib_table.add_row(mod, "[yellow]— 未インストール[/yellow]")
+    console.print(lib_table)
 
-    console.print(f"  {'[green]✓[/green]' if platform.system() == 'Darwin' else '[yellow]-[/yellow]'} "
-                  f"Apple Vision (macOS実機が必要, §9.2)")
-    console.print(f"  {'[green]✓[/green]' if os.environ.get('MATHPIX_APP_KEY') else '[yellow]-[/yellow]'} "
-                  f"MATHPIX_APP_KEY (§16.2 REQ-SEC-02)")
+    engine_table = Table("OCRエンジン", "状態", title="OCRエンジン(§9.2)")
+    for name, status in describe_availability().items():
+        mark = "[green]✓[/green]" if status == "利用可能" else "[yellow]—[/yellow]"
+        engine_table.add_row(name, f"{mark} {status}")
+    console.print(engine_table)
 
     config = load_config()
     root = config.resolved_output_root()
     usage = shutil.disk_usage(root if root.exists() else Path.home())
     free_gb = usage.free / (1024**3)
-    console.print(f"  保存先 {root}: 空き容量 約{free_gb:.1f}GB (§16.1: 1冊あたり目安5.1GB)")
+    verdict = "[green]十分[/green]" if free_gb > 10 else "[yellow]不足の可能性[/yellow]"
+    console.print(f"保存先 {root}: 空き容量 {free_gb:.1f}GB {verdict}(§16.1: 1冊あたり目安5.1GB)")
+    console.print(f"既定の並列数: {default_workers()}(§15.1)")
+
+
+# ---------------------------------------------------------------------------
+# レビューUI / 出力
+# ---------------------------------------------------------------------------
 
 
 @app.command()
-def review(book_id: str = typer.Argument(None)) -> None:
+def review(
+    book_id: str = typer.Argument(None, help="省略可(ホーム画面から選べます)"),
+    port: int = typer.Option(8000, "--port"),
+) -> None:
     """レビュー・編集UIを起動する(§11.7)。"""
     import uvicorn
 
-    console.print("[bold]レビューUIを起動します[/bold] → http://localhost:8000")
-    uvicorn.run("tscan.review.server:app", host="127.0.0.1", port=8000)
+    target = f"/book/{book_id}" if book_id else "/"
+    console.print(f"[bold]レビューUIを起動します[/bold] → http://127.0.0.1:{port}{target}")
+    uvicorn.run("tscan.review.server:app", host="127.0.0.1", port=port, log_level="warning")
 
 
 @app.command()
 def export(
     book_id: str = typer.Argument(...),
-    format: str = typer.Option("md,report", "--format", help="pdf,md,json,report をカンマ区切りで指定"),
+    format: str = typer.Option("md,json,report,pdf", "--format", help="pdf,md,json,report をカンマ区切りで"),
     output_dir: str | None = typer.Option(None, "--output-dir"),
 ) -> None:
     """検索可能PDF / Markdown+LaTeX / JSON / 品質レポートを出力する(§13)。"""
     from tscan.export.markdown import book_to_markdown
+    from tscan.export.pdf import build_searchable_pdf
     from tscan.export.report import generate_quality_report
 
     book = _load_book(book_id, output_dir)
     book_root = _book_dir(book_id, output_dir)
     out_dir = book_root / "out"
     out_dir.mkdir(parents=True, exist_ok=True)
-
     formats = {f.strip() for f in format.split(",")}
 
     if "md" in formats:
-        md_path = out_dir / f"{book_id}.md"
-        md_path.write_text(book_to_markdown(book), encoding="utf-8")
-        console.print(f"[green]✓[/green] Markdown出力: {md_path}")
+        path = out_dir / f"{book_id}.md"
+        path.write_text(book_to_markdown(book), encoding="utf-8")
+        console.print(f"[green]✓[/green] Markdown: {path}")
 
     if "json" in formats:
-        json_path = out_dir / f"{book_id}.json"
-        book.save(json_path)
-        console.print(f"[green]✓[/green] JSON出力: {json_path}")
+        path = out_dir / f"{book_id}.json"
+        book.save(path)
+        console.print(f"[green]✓[/green] JSON: {path}")
 
     if "report" in formats:
-        report_path = out_dir / f"{book_id}_report.html"
-        report_path.write_text(generate_quality_report(book), encoding="utf-8")
-        console.print(f"[green]✓[/green] 品質レポート出力: {report_path}")
+        path = out_dir / f"{book_id}_report.html"
+        path.write_text(generate_quality_report(book), encoding="utf-8")
+        console.print(f"[green]✓[/green] 品質レポート: {path}")
 
     if "pdf" in formats:
-        console.print(
-            "[yellow]PDF出力にはOCR結果とテキストレイヤーの統合(§13.1)が必要です。"
-            "現状は tscan.export.pdf.build_image_pdf() で画像のみのPDFが作成できます。[/yellow]"
-        )
+        stage_dir = book_root / "work" / "stages" / "preprocessed"
+        display = compute_display_page_index(book.pages)
+        images = {}
+        for page in book.pages:
+            if page.deleted:
+                continue
+            candidate = stage_dir / f"{book_id}_p{display[page.page_id]:04d}.png"
+            images[page.page_id] = candidate if candidate.exists() else Path(page.image_path)
+
+        path = build_searchable_pdf(book, images, out_dir / f"{book_id}.pdf")
+        size_mb = path.stat().st_size / (1024**2)
+        console.print(f"[green]✓[/green] 検索可能PDF: {path} ({size_mb:.1f}MB)")
+
+
+# ---------------------------------------------------------------------------
+# ページ管理(§7.7)
+# ---------------------------------------------------------------------------
 
 
 @pages_app.command("list")
 def pages_list(book_id: str = typer.Argument(...), output_dir: str | None = typer.Option(None, "--output-dir")) -> None:
-    """ページ一覧をターミナルで確認する(§7.7.3)。"""
+    """ページ一覧を表示する(§7.7.3)。"""
     book = _load_book(book_id, output_dir)
-    display_index = compute_display_page_index(book.pages)
+    display = compute_display_page_index(book.pages)
+
+    table = Table("#", "ファイル", "ノンブル", "レイアウト", "ブロック", "状態")
     for page in sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key):
-        status = "⚠ 要確認" if page.needs_review else "✅"
-        console.print(f"  p{display_index[page.page_id]:04d}  {Path(page.image_path).name}  {status}")
+        pending = sum(1 for b in page.blocks if b.review_status == "pending")
+        status = f"[yellow]⚠ 要確認 {pending}[/yellow]" if pending else ("[green]✅[/green]" if page.blocks else "[dim]🔲 未処理[/dim]")
+        table.add_row(
+            f"{display[page.page_id]:04d}",
+            Path(page.image_path).name,
+            str(page.printed_number or "—"),
+            "縦書き" if page.layout == "vertical" else "横書き",
+            str(len(page.blocks)),
+            status,
+        )
+    console.print(table)
 
 
 @pages_app.command("insert")
@@ -282,31 +343,24 @@ def pages_insert(
     image: Path = typer.Option(..., "--image", help="挿入する画像ファイル"),
     output_dir: str | None = typer.Option(None, "--output-dir"),
 ) -> None:
-    """ページを挿入する(§7.7.3 REQ-PAGEMGMT-03)。既存ページのorder_keyは一切変更しない。"""
+    """ページを挿入する(REQ-PAGEMGMT-03)。既存ページのorder_keyは変更しない。"""
     book = _load_book(book_id, output_dir)
     book_root = _book_dir(book_id, output_dir)
-    display_index = compute_display_page_index(book.pages)
-    index_to_id = {v: k for k, v in display_index.items()}
+    pages = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
+    before = _resolve_page(book, after)
+    idx = pages.index(before)
+    following = pages[idx + 1] if idx + 1 < len(pages) else None
 
-    if after not in index_to_id:
-        console.print(f"[red]ページ番号{after}が見つかりません[/red]")
-        raise typer.Exit(code=1)
-
-    visible_sorted = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
-    before_page = next(p for p in visible_sorted if p.page_id == index_to_id[after])
-    after_idx = visible_sorted.index(before_page)
-    after_page = visible_sorted[after_idx + 1] if after_idx + 1 < len(visible_sorted) else None
-
-    new_key = insert_between(before_page.order_key, after_page.order_key if after_page else before_page.order_key + 2000.0)
+    new_key = insert_between(before.order_key, following.order_key if following else before.order_key + 2000.0)
 
     dst_dir = book_root / "work" / "raw"
     dst_dir.mkdir(parents=True, exist_ok=True)
-    dst_path = dst_dir / f"{book_id}_inserted_{image.stem}{image.suffix}"
-    dst_path.write_bytes(image.read_bytes())
+    dst = dst_dir / f"{book_id}_inserted_{image.stem}{image.suffix}"
+    dst.write_bytes(image.read_bytes())
 
-    book.pages.append(Page.new(image_path=str(dst_path), order_key=new_key))
+    book.pages.append(Page.new(image_path=str(dst), order_key=new_key))
     book.save(book_root / "book.json")
-    console.print(f"[green]✓[/green] p{after}の後に挿入しました(order_key={new_key})。このページのみ`tscan run`で再処理してください。")
+    console.print(f"[green]✓[/green] p{after}の後に挿入(order_key={new_key})。`tscan run --from preprocess`で該当ページのみ処理されます。")
 
 
 @pages_app.command("delete")
@@ -315,20 +369,12 @@ def pages_delete(
     page: int = typer.Option(..., "--page"),
     output_dir: str | None = typer.Option(None, "--output-dir"),
 ) -> None:
-    """ページを論理削除する(§7.7.3)。物理削除は行わない(REQ-PAGEMGMT-04)。"""
+    """ページを論理削除する(REQ-PAGEMGMT-04)。"""
     book = _load_book(book_id, output_dir)
-    book_root = _book_dir(book_id, output_dir)
-    display_index = compute_display_page_index(book.pages)
-    index_to_id = {v: k for k, v in display_index.items()}
-
-    if page not in index_to_id:
-        console.print(f"[red]ページ番号{page}が見つかりません[/red]")
-        raise typer.Exit(code=1)
-
-    target = next(p for p in book.pages if p.page_id == index_to_id[page])
+    target = _resolve_page(book, page)
     target.deleted = True
-    book.save(book_root / "book.json")
-    console.print(f"[green]✓[/green] p{page}を削除しました(論理削除。復元は book.json を編集)")
+    book.save(_book_dir(book_id, output_dir) / "book.json")
+    console.print(f"[green]✓[/green] p{page}を削除しました(論理削除)")
 
 
 @pages_app.command("move")
@@ -338,37 +384,61 @@ def pages_move(
     after: int = typer.Option(..., "--after"),
     output_dir: str | None = typer.Option(None, "--output-dir"),
 ) -> None:
-    """ページを並べ替える(§7.7.3)。移動対象のorder_keyのみ更新する。"""
+    """ページを並べ替える(REQ-PAGEMGMT-03)。移動対象のorder_keyのみ更新する。"""
     book = _load_book(book_id, output_dir)
-    book_root = _book_dir(book_id, output_dir)
-    display_index = compute_display_page_index(book.pages)
-    index_to_id = {v: k for k, v in display_index.items()}
+    pages = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
+    target = _resolve_page(book, page)
+    before = _resolve_page(book, after)
+    idx = pages.index(before)
+    following = pages[idx + 1] if idx + 1 < len(pages) else None
 
-    if page not in index_to_id or after not in index_to_id:
-        console.print("[red]指定したページ番号が見つかりません[/red]")
-        raise typer.Exit(code=1)
+    target.order_key = insert_between(before.order_key, following.order_key if following else before.order_key + 2000.0)
+    book.save(_book_dir(book_id, output_dir) / "book.json")
+    console.print(f"[green]✓[/green] p{page}をp{after}の後に移動(order_key={target.order_key})")
 
-    visible_sorted = sorted((p for p in book.pages if not p.deleted), key=lambda p: p.order_key)
-    target = next(p for p in book.pages if p.page_id == index_to_id[page])
-    before_page = next(p for p in visible_sorted if p.page_id == index_to_id[after])
-    before_idx = visible_sorted.index(before_page)
-    after_page = visible_sorted[before_idx + 1] if before_idx + 1 < len(visible_sorted) else None
 
-    target.order_key = insert_between(
-        before_page.order_key, after_page.order_key if after_page else before_page.order_key + 2000.0
+@app.command()
+def evaluate(
+    book_id: str = typer.Argument(...),
+    ground_truth: Path = typer.Option(..., "--ground-truth", help="ページ番号->正解テキストのJSON"),
+    math_ground_truth: Path | None = typer.Option(
+        None, "--math-ground-truth", help="ページ番号->数式行リストのJSON(§11.8の数式行正解率用)"
+    ),
+    output_dir: str | None = typer.Option(None, "--output-dir"),
+) -> None:
+    """正解データと突き合わせて精度を測る(§11.8 / §18)。"""
+    import json
+
+    from tscan.evaluate import evaluate_book
+
+    book = _load_book(book_id, output_dir)
+    raw = json.loads(ground_truth.read_text(encoding="utf-8"))
+    references = {int(k): v for k, v in raw.items()}
+
+    math_references = None
+    if math_ground_truth and math_ground_truth.exists():
+        raw_math = json.loads(math_ground_truth.read_text(encoding="utf-8"))
+        math_references = {int(k): v for k, v in raw_math.items()}
+
+    result = evaluate_book(book, references, math_references)
+
+    table = Table("指標", "実測値", "判定", title=f"{book_id} 精度評価(§11.8)")
+    for label, (passed, value) in result.verdict().items():
+        table.add_row(label, value, "[green]✓ 合格[/green]" if passed else "[red]✗ 未達[/red]")
+    console.print(table)
+    console.print(
+        f"正解 {result.reference_chars}文字 / 認識 {result.hypothesis_chars}文字 / "
+        f"{result.blocks}ブロック"
     )
-    book.save(book_root / "book.json")
-    console.print(f"[green]✓[/green] p{page}をp{after}の後に移動しました(order_key={target.order_key})")
 
 
 @app.command("config-set-output-dir")
 def config_set_output_dir(path: str = typer.Argument(...)) -> None:
-    """既定保存先を変更する(§14.5)。ユーザー設定(~/.config/tscan/)に保存し、
-    リポジトリ同梱の config/default.yaml は変更しない。"""
+    """既定保存先を変更する(§14.5)。ユーザー設定に保存し、リポジトリ同梱の設定は変更しない。"""
     from tscan.config import USER_CONFIG_PATH, set_user_output_dir
 
     set_user_output_dir(path)
-    console.print(f"[green]✓[/green] 既定保存先を変更しました: {path} ({USER_CONFIG_PATH}に保存)")
+    console.print(f"[green]✓[/green] 既定保存先を変更: {path} ({USER_CONFIG_PATH})")
 
 
 if __name__ == "__main__":

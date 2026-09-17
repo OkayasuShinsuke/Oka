@@ -45,6 +45,7 @@ class Block:
     reading_order: int
     text: str = ""
     latex: str = ""
+    equation_number: str = ""  # 「(3.14)」等。数式ブロックのみ(§12.1)
     confidence: float = 0.0
     issues: list[Issue] = field(default_factory=list)
     review_status: str = "pending"  # pending | confirmed | edited | skipped(§11.7.4)

@@ -7,8 +7,12 @@ from pathlib import Path
 
 import exifread
 
-# iPhone(HEIC)・ミラーレス一眼RAW(ARW等)の両方に対応(§6.4.6, §7.3)
-SUPPORTED_EXTENSIONS = ["heic", "arw", "cr2", "cr3", "nef", "raf", "jpg", "jpeg"]
+# iPhone(HEIC)・ミラーレス一眼RAW(ARW等)・一般的な画像形式に対応(§6.4.6, §7.3)
+SUPPORTED_EXTENSIONS = [
+    "heic", "heif",                          # iPhone
+    "arw", "cr2", "cr3", "nef", "raf", "dng",  # ミラーレス一眼RAW(§6.4.2)
+    "jpg", "jpeg", "png", "tif", "tiff",     # 一般的な画像・スキャナ出力
+]
 
 
 def _iter_source_files(src_dir: Path) -> list[Path]:
@@ -59,26 +63,38 @@ def detect_page_gaps(nombres: list[int | None]) -> list[str]:
 
     引数 nombres : ファイル名順に並んだノンブル。読めなければ None。
     戻り値       : 人間向けの警告メッセージのリスト。
+
+    ノンブルが読めなかったページがある場合、その枚数を考慮して判定する。
+    例: [87, None, 89] は「87の次が89」ではなく「間に1枚(読めなかったページ)がある」ので
+        抜けではない。これを考慮しないと、実在するページを毎回「抜け」と誤報してしまう。
     """
     issues: list[str] = []
     prev_value: int | None = None
     prev_index: int | None = None
+    unread_between = 0  # 直前の判読できたページから、ここまでに読めなかった枚数
 
     for index, value in enumerate(nombres):
         if value is None:
             issues.append(f"p{index + 1:04d}: ノンブルを読めませんでした(目視確認)")
+            unread_between += 1
             continue
+
         if prev_value is not None:
             diff = value - prev_value
+            expected_max = 1 + unread_between  # 読めなかった枚数の分だけ飛んでよい
+
             if diff == 0:
                 issues.append(f"p{prev_index + 1:04d}-p{index + 1:04d}: 同じページを2回撮った可能性")
             elif diff < 0:
                 issues.append(f"p{index + 1:04d}: ページが逆行({prev_value}→{value})")
-            elif diff > 1:
-                missing = diff - 1
-                issues.append(f"p{index + 1:04d}: {missing}ページ抜けの可能性({prev_value}→{value})")
+            elif diff > expected_max:
+                missing = diff - expected_max
+                detail = f"({prev_value}→{value}" + (f"、間に判読不能{unread_between}枚" if unread_between else "") + ")"
+                issues.append(f"p{index + 1:04d}: {missing}ページ抜けの可能性{detail}")
+
         prev_value = value
         prev_index = index
+        unread_between = 0
 
     return issues
 
