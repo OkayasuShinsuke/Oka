@@ -305,6 +305,9 @@ def flatten_illumination(
         kernel_size = max(51, (min(gray.shape[:2]) // 16) | 1)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
     background = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
+    # 閉処理だけだと、表の網掛けや裏写りの周りに核の形(楕円)の明るい斑が出る。
+    # 照明ムラは滑らかなので、推定した背景をぼかして斑を消す
+    background = cv2.GaussianBlur(background, (0, 0), sigmaX=kernel_size / 2)
     paper_level = float(np.percentile(background, 90))
     background = np.clip(background, max(1.0, paper_level * min_background_ratio), 255).astype(np.uint8)
     normalized = cv2.divide(gray, background, scale=255)
