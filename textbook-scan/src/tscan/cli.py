@@ -13,7 +13,7 @@ from rich.table import Table
 from tscan.config import load_config
 from tscan.ingest import detect_page_gaps, rename_by_shot_time
 from tscan.models import Book, Page, compute_display_page_index, insert_between
-from tscan.pipeline import PipelineContext, Stage, default_workers, load_calibration, run_book
+from tscan.pipeline import PipelineContext, Stage, default_workers, expand_spreads, load_calibration, run_book
 
 app = typer.Typer(help="教科書スキャン・日本語/数式OCRシステム(docs/textbook-scan-spec.md 実装)")
 pages_app = typer.Typer(help="ページ管理(§7.7)")
@@ -152,6 +152,11 @@ def run(
         console.print("[yellow]セッション校正が未実行です。`tscan calibrate` を推奨します(§8.3.1)。[/yellow]")
 
     n_workers = workers or default_workers()
+    if stage == Stage.PREPROCESS and ctx.enhance and ctx.real_photo:
+        # 見開き写真を左右2ページに展開してから枚数を数える(§8.4)
+        added = expand_spreads(book, workers=n_workers)
+        if added:
+            console.print(f"見開き写真 {added}枚 を左右のページに分けました")
     visible = [p for p in book.pages if not p.deleted]
     console.print(f"[bold]{len(visible)}ページ[/bold] を処理します(並列数 {n_workers}、工程 {stage.value} から)")
 

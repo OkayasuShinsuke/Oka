@@ -167,6 +167,25 @@ def estimate_curl(image: np.ndarray) -> float:
     return min(deviation / height, 1.0)
 
 
+def text_line_sharpness(image: np.ndarray) -> float:
+    """文字行がどれだけ真っ直ぐ水平に並んでいるかの指標(大きいほど良い)。
+
+    行方向(横)にインクを足し合わせた射影プロファイルは、行が真っ直ぐなら
+    「行の位置に鋭い山、行間に深い谷」になる。行が曲がったり傾いたりすると
+    山が崩れて平坦になる。その凹凸の大きさ(標準偏差/平均)を返す。
+
+    湾曲補正の前後でこの値を比べ、補正で行が真っ直ぐになったときだけ採用する。
+    紙の縁の曲線から推定する補正は、縁が別の紙(ページの束)や指で乱れていると
+    本文を歪ませることがあり、実写真ではCERが31%→69%に悪化した。
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    _, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    profile = (ink > 0).sum(axis=1).astype(np.float64)
+    if profile.mean() <= 0:
+        return 0.0
+    return float(profile.std() / profile.mean())
+
+
 def dewarp_page(
     image: np.ndarray,
     output_size: tuple[int, int] | None = None,

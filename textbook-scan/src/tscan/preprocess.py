@@ -319,8 +319,27 @@ def flatten_illumination(
 # ---------------------------------------------------------------------------
 
 
-def denoise_and_sharpen(gray: np.ndarray) -> np.ndarray:
-    """粒状ノイズを消し、文字の輪郭を立てる(P8)。"""
+def estimate_char_height(gray: np.ndarray) -> float:
+    """文字らしい連結成分の高さの中央値(px)。解像度が足りているかの目安(§6.1 の40px基準)。"""
+    _, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    count, _labels, stats, _ = cv2.connectedComponentsWithStats(ink)
+    if count <= 1:
+        return 0.0
+    h = stats[1:, cv2.CC_STAT_HEIGHT]
+    w = stats[1:, cv2.CC_STAT_WIDTH]
+    sel = (h >= 6) & (h <= 80) & (w <= 80)
+    return float(np.median(h[sel])) if sel.any() else 0.0
+
+
+def denoise_and_sharpen(gray: np.ndarray, min_char_height: float = 20.0) -> np.ndarray:
+    """粒状ノイズを消し、文字の輪郭を立てる(P8)。
+
+    文字が小さい(中央値 min_char_height px 未満)ときは何もしない。細い画線に
+    ノイズ除去と鮮鋭化を掛けると画線が欠けて、実写真(文字高15px)ではCERが
+    24%→37%に悪化した。十分な解像度(合成画像: 文字高40px)では効果がある。
+    """
+    if estimate_char_height(gray) < min_char_height:
+        return gray
     denoised = cv2.fastNlMeansDenoising(gray, h=7)
     blurred = cv2.GaussianBlur(denoised, (0, 0), sigmaX=1.0)
     sharpened = cv2.addWeighted(denoised, 1.5, blurred, -0.5, 0)

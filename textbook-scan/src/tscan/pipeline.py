@@ -71,7 +71,7 @@ class PipelineContext:
 
 # 前処理が付ける警告。前処理をやり直すときに古いものを消すための接頭辞一覧
 _PREPROCESS_WARNINGS = (
-    "ASPECT_RATIO_ANOMALY", "PAGE_CORNERS_NOT_FOUND", "DEWARPED", "DEWARP_SKIPPED", "FINGERS_REMOVED",
+    "ASPECT_RATIO_ANOMALY", "PAGE_CORNERS_NOT_FOUND", "DEWARPED", "DEWARP_SKIPPED", "DEWARP_REJECTED", "FINGERS_REMOVED",
     "DARK_BOXES_INVERTED",
 )
 
@@ -105,13 +105,17 @@ def preprocess_page(page: Page, ctx: PipelineContext, page_index: int) -> tuple[
     if extracted is not None:
         crop, mask = extracted
         result = enhance.dewarp_page(crop, mask=mask) if ctx.enhance else None
-        if result is not None:
+        if result is None:
+            warped = crop
+            warnings.append("DEWARP_SKIPPED")
+        elif enhance.text_line_sharpness(result) < enhance.text_line_sharpness(crop):
+            # 補正で文字行がかえって崩れた(縁の曲線が本文の湾曲を表していない)→ 採用しない
+            warped = crop
+            warnings.append("DEWARP_REJECTED")
+        else:
             warped = result
             dewarped = True
             warnings.append("DEWARPED:real")
-        else:
-            warped = crop
-            warnings.append("DEWARP_SKIPPED")
         # 切り出しは本文範囲を基準にしているので、物理的なページの縦横比は検査しない
     else:
         # P2.5: ブック型スキャナ相当の補正(指の除去・湾曲補正・背景消去)

@@ -103,6 +103,12 @@ def dense_span(profile: np.ndarray, fraction: float = 0.12, min_gap: int = 40) -
     return best
 
 
+def _count_line_bands(lines: np.ndarray) -> int:
+    """文字行マスクの行方向プロファイルから、行の帯(連続して文字がある行の塊)の数を数える。"""
+    rows = (lines > 0).sum(axis=1) > 0
+    return int(np.count_nonzero(rows[1:] & ~rows[:-1]) + (1 if rows.size and rows[0] else 0))
+
+
 @dataclass
 class SpreadLayout:
     """見開き写真の解析結果。"""
@@ -146,8 +152,17 @@ def analyze_spread(image_bgr: np.ndarray) -> SpreadLayout | None:
         # 左右にしっかり本文があり、谷が両側の1/4以下なら見開き
         left_peak = inner[:lo].max() if lo > 0 else 0
         right_peak = inner[hi:].max() if hi < len(inner) else 0
-        if left_peak > 0 and right_peak > 0 and window[valley] < min(left_peak, right_peak) * 0.25:
-            gutter = x0 + lo + valley
+        candidate = x0 + lo + valley
+        if (
+            left_peak > 0
+            and right_peak > 0
+            and window[valley] < min(left_peak, right_peak) * 0.25
+            and _count_line_bands(lines[:, x0:candidate]) >= 3
+            and _count_line_bands(lines[:, candidate:x1]) >= 3
+        ):
+            # 谷の両側にそれぞれ3行以上の本文がある → 見開き。
+            # (1行だけの画像の語間の隙間や、図の余白を「ノド」と誤認しない)
+            gutter = candidate
         else:
             gutter = None
 

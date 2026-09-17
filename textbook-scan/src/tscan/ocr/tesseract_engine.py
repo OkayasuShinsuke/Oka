@@ -65,12 +65,27 @@ class TesseractEngine:
                 "  共通  : pip install pytesseract"
             )
 
+    @staticmethod
+    def _limit_threads() -> None:
+        """Tesseract内部のOpenMP並列を止める(§15 並列処理の前提)。
+
+        tscan はページ単位で複数の tesseract プロセスを同時に走らせる。各プロセスが
+        さらにCPUコア数分のスレッドを立てると、スレッドがコアを奪い合って
+        待ち時間(スピンウェイト)だけが増える。実測では1ページ0.9秒の処理が
+        4プロセス同時で13分以上(CPU時間)に膨らんだ。1プロセス1スレッドにすると
+        ページ並列の効果がそのまま出る。利用者が明示的に設定していれば尊重する。
+        """
+        import os
+
+        os.environ.setdefault("OMP_THREAD_LIMIT", "1")
+
     def recognize(self, image: np.ndarray, vertical: bool = False, psm: int = 0) -> list[OcrLine]:
         """画像を認識し、行単位のOcrLineのリストを返す。
 
         psm=0を渡すと、verticalフラグから自動で6(横書き)/5(縦書き)を選ぶ。
         """
         self._require()
+        self._limit_threads()
         import pytesseract
         from pytesseract import Output
 
