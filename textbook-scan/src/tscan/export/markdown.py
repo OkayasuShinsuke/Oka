@@ -20,11 +20,15 @@ def _block_to_markdown(block: Block) -> str:
     else:
         body = block.text
 
-    # §11.3 REQ-QA-05: 0.80〜0.95 は自動採用するが⚠️マーカーを付ける
-    if block.confidence < 0.95 and block.edited_by != "user":
-        reasons = "; ".join(i.detail for i in block.issues[:2] if i.severity != "low")
+    # §11.3 REQ-QA-05: 0.80〜0.95 の帯には⚠️マーカーを付ける。
+    # ただし「印が全行に付くと印の意味がなくなる」ため、実際に指摘のある行に限る。
+    # (エンジンが1つしかない環境では信頼度が構造的に0.95未満に張り付くため、
+    #  信頼度だけを条件にすると正しく読めた行にまでマーカーが付いてしまう)
+    notable = [i for i in block.issues if i.severity in ("medium", "high")]
+    if block.edited_by != "user" and (block.review_status == "pending" or notable):
         label = "要確認" if block.review_status == "pending" else "自動採用(要注意)"
         body += f"\n\n> ⚠️ 信頼度 {block.confidence:.2f} — {label} ({block.block_id})"
+        reasons = "; ".join(i.detail for i in notable[:2])
         if reasons:
             body += f"\n> {reasons}"
 
