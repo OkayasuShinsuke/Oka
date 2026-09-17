@@ -123,6 +123,8 @@ def run(
     subject: str = typer.Option("physics", "--subject", help="文脈辞書の分野: physics | math | kokugo(§11.6)"),
     expected_ratio: float = typer.Option(182 / 257, "--expected-ratio", help="§8.3.2 想定縦横比(既定B5)"),
     offline: bool = typer.Option(False, "--offline", help="外部APIを使わない(§16.2 REQ-SEC-03)"),
+    enhance: bool = typer.Option(True, "--enhance/--no-enhance",
+                                 help="ブック型スキャナ相当の補正(指の除去・湾曲補正・背景消去)"),
 ) -> None:
     """前処理→OCR→レイアウト解析→検証を実行する(§8〜§11)。"""
     try:
@@ -144,6 +146,7 @@ def run(
         subject=subject,
         offline=offline,
         search_margin_px=config.preprocess.calibration_search_margin_px,
+        enhance=enhance,
     )
     if ctx.calibration is None:
         console.print("[yellow]セッション校正が未実行です。`tscan calibrate` を推奨します(§8.3.1)。[/yellow]")

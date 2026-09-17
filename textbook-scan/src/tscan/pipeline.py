@@ -19,7 +19,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from tscan import layout, preprocess
+from tscan import enhance, layout, preprocess
 from tscan.models import Block, BlockKind, Book, Page
 from tscan.ocr.registry import EngineSet, build_math_engines, build_text_engines
 from tscan.verify import VerifyThresholds, load_lexicon, verify_block
@@ -54,6 +54,9 @@ class PipelineContext:
     offline: bool = False
     thresholds: VerifyThresholds = field(default_factory=VerifyThresholds)
     search_margin_px: int = 40
+    # ブック型スキャナ相当の補正(§8 拡張: 指の除去・湾曲補正・背景消去)
+    enhance: bool = True
+    curl_threshold: float = 0.0
 
     @property
     def work_dir(self) -> Path:
@@ -81,20 +84,43 @@ def preprocess_page(page: Page, ctx: PipelineContext, page_index: int) -> tuple[
 
     image = preprocess.load_as_bgr(Path(page.image_path))  # P1
 
-    # P3-P4: セッション校正のヒントを使った4隅検出 + 台形補正(§8.3.1)
-    if ctx.calibration is not None:
-        corners = preprocess.detect_with_hint(image, ctx.calibration, ctx.search_margin_px)
-    else:
-        corners = preprocess.detect_page_corners(image)
+    # P2.5: ブック型スキャナ相当の補正(指の除去・湾曲補正・背景消去)
+    # 指はページの輪郭を隠すため、4隅検出より先に消す必要がある。
+    dewarped = False
+    if ctx.enhance:
+        image, info = enhance.enhance_book_photo(
+            image, do_dewarp=True, do_finger_removal=True, do_background=False,
+            curl_threshold=ctx.curl_threshold,
+        )
+        dewarped = bool(info["dewarped"])
+        if info["fingers_removed"]:
+            warnings.append(f"FINGERS_REMOVED:{info['fingers_removed']}")
+        if dewarped:
+            warnings.append(f"DEWARPED:{info['curl']}")
 
-    if corners is not None:
-        warped = preprocess.correct_perspective(image, corners)
-        # §8.3.2 REQ-PRE-04: 補正結果の自動検査
+    if dewarped:
+        # 湾曲補正は紙面の切り出しと矩形化まで済ませているため、台形補正は行わない
+        warped = image
         if not preprocess.check_aspect_ratio(warped, ctx.expected_ratio, ctx.aspect_tolerance):
             warnings.append("ASPECT_RATIO_ANOMALY")
     else:
-        warped = image
-        warnings.append("PAGE_CORNERS_NOT_FOUND")
+        # P3-P4: セッション校正のヒントを使った4隅検出 + 台形補正(§8.3.1)
+        if ctx.calibration is not None:
+            corners = preprocess.detect_with_hint(image, ctx.calibration, ctx.search_margin_px)
+        else:
+            corners = preprocess.detect_page_corners(image)
+
+        if corners is not None:
+            warped = preprocess.correct_perspective(image, corners)
+            # §8.3.2 REQ-PRE-04: 補正結果の自動検査
+            if not preprocess.check_aspect_ratio(warped, ctx.expected_ratio, ctx.aspect_tolerance):
+                warnings.append("ASPECT_RATIO_ANOMALY")
+        else:
+            warped = image
+            warnings.append("PAGE_CORNERS_NOT_FOUND")
+
+    if ctx.enhance:
+        warped = enhance.clean_background(warped)  # 紙面の外に残った机・マットを白で消す
 
     gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY) if warped.ndim == 3 else warped
     gray = preprocess.deskew(gray)  # P5
