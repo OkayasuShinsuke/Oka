@@ -73,6 +73,7 @@ class Page:
     # 見開き写真のどちら側か: "left" | "right" | "single"。None は未判定(§8.4 見開き分割)。
     # 見開き1枚から左右2つの Page が作られ、両方が同じ image_path を指す
     spread_side: str | None = None
+    rotation: int = 0  # 正立させるための時計回りの回転角(0/90/180/270)。見開き展開時に判定
 
     @property
     def needs_review(self) -> bool:

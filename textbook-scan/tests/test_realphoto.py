@@ -166,3 +166,52 @@ def test_expand_spreads_leaves_undetectable_photo_unmarked(tmp_path):
     book = Book(book_id="t", pages=[Page.new(str(path), 1000.0)])
     assert expand_spreads(book, workers=1) == 0
     assert book.pages[0].spread_side is None  # 従来経路に任せる
+
+
+# --- 向きの判定・縁に接した色付きの帯 -----------------------------------------
+
+
+def test_rotate_upright_roundtrip():
+    from tscan.realphoto import rotate_upright
+
+    photo = _spread_photo()
+    turned = cv2.rotate(photo, cv2.ROTATE_90_CLOCKWISE)  # 本を横向きに構えた写真
+    assert rotate_upright(turned, 270).shape == photo.shape
+    assert np.array_equal(rotate_upright(turned, 270), photo)
+    assert rotate_upright(photo, 0) is photo
+
+
+def test_detect_rotation_on_sideways_photo():
+    """横向きの写真は 90 か 270、正立した写真は 0 と判定する(OSDが使える環境のみ)。"""
+    import shutil
+
+    if shutil.which("tesseract") is None:
+        pytest.skip("tesseractが未インストール")
+    from tscan.realphoto import detect_rotation
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    font_path = next(
+        (p for p in ["/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf", "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc"]
+         if __import__("pathlib").Path(p).exists()), None,
+    )
+    if font_path is None:
+        pytest.skip("日本語フォントが見つかりません")
+    image = Image.new("RGB", (1200, 900), (245, 245, 245))
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(font_path, 36)
+    for i in range(12):
+        draw.text((60, 60 + i * 60), "磁場の中を運動する電荷には力がはたらく。この力をローレンツ力とよぶ。", font=font, fill=(20, 20, 20))
+    upright = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    if detect_rotation(upright) != 0:
+        pytest.skip("この環境のOSDでは正立画像を判定できない")  # osd.traineddata の有無に依存
+    assert detect_rotation(cv2.rotate(upright, cv2.ROTATE_90_CLOCKWISE)) in (90, 270)
+
+
+def test_paper_mask_keeps_colored_band_touching_page_edge():
+    """ページ上端に接した青い帯(公式ボックス)は、輪郭の切れ込みになっても紙面に含める。"""
+    photo = _spread_photo(with_box=False)
+    cv2.rectangle(photo, (640, 140), (1100, 260), (200, 120, 40), -1)  # 右ページ上端に接する青い帯
+    mask = paper_mask_hsv(photo)
+    assert mask is not None
+    assert mask[200, 900] == 255

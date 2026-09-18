@@ -72,7 +72,7 @@ class PipelineContext:
 # 前処理が付ける警告。前処理をやり直すときに古いものを消すための接頭辞一覧
 _PREPROCESS_WARNINGS = (
     "ASPECT_RATIO_ANOMALY", "PAGE_CORNERS_NOT_FOUND", "DEWARPED", "DEWARP_SKIPPED", "DEWARP_REJECTED", "FINGERS_REMOVED",
-    "DARK_BOXES_INVERTED",
+    "DARK_BOXES_INVERTED", "ROTATED",
 )
 
 
@@ -99,6 +99,9 @@ def preprocess_page(page: Page, ctx: PipelineContext, page_index: int) -> tuple[
     # 紙面の外(机・手)は紙の地色で塗られ、湾曲補正には紙面マスクをそのまま渡す。
     extracted = None
     if ctx.enhance and ctx.real_photo:
+        if page.rotation:
+            image = realphoto.rotate_upright(image, page.rotation)
+            warnings.append(f"ROTATED:{page.rotation}")
         extracted = realphoto.extract_page(image, page.spread_side)
 
     dewarped = False
@@ -347,7 +350,9 @@ def expand_spreads(book: Book, workers: int = 1) -> int:
 
     def _kind(page: Page) -> str | None:
         try:
-            return realphoto.detect_spread(preprocess.load_as_bgr(Path(page.image_path)))
+            image = preprocess.load_as_bgr(Path(page.image_path))
+            page.rotation = realphoto.detect_rotation(image)  # 本を横向きに構えた写真を正立させる
+            return realphoto.detect_spread(realphoto.rotate_upright(image, page.rotation))
         except Exception:  # noqa: BLE001 — 読めない写真は後段の処理で失敗として報告される
             return None
 
@@ -363,6 +368,7 @@ def expand_spreads(book: Book, workers: int = 1) -> int:
             next_key = ordered[pos + 1].order_key if pos + 1 < len(ordered) else page.order_key + 1000.0
             right = Page.new(page.image_path, insert_between(page.order_key, next_key))
             right.spread_side = "right"
+            right.rotation = page.rotation
             book.pages.append(right)
             ordered.insert(pos + 1, right)
             added += 1

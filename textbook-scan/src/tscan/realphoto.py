@@ -27,8 +27,14 @@ import numpy as np
 def paper_mask_hsv(image_bgr: np.ndarray, max_saturation: int = 70, min_value: int = 110) -> np.ndarray | None:
     """「明るくて彩度が低い」領域のうち、画像中心を含む連結成分を紙面として返す。"""
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
-    _h, s, v = cv2.split(hsv)
-    paper = ((s < max_saturation) & (v > min_value)).astype(np.uint8) * 255
+    h, s, v = cv2.split(hsv)
+    paper = (s < max_saturation) & (v > min_value)
+    # 印刷物の色付きの帯・ボックス(青〜緑、OpenCVの色相 35〜150)も紙面の一部として扱う。
+    # 机(茶)・手(肌色)・籠(ピンク)の色相はこの範囲に入らないので背景と混ざらない。
+    # ページの縁に接した公式ボックスは輪郭の穴埋めでは救えない(外側の切れ込みになる)ため、
+    # 色相で最初から紙面に含める。赤・橙の帯は机や肌と色相が重なるので対象外(既知の制約)
+    paper |= (s >= max_saturation) & (v > 60) & (h >= 35) & (h <= 150)
+    paper = paper.astype(np.uint8) * 255
 
     paper = cv2.morphologyEx(paper, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
     paper = cv2.morphologyEx(paper, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (41, 41)))
@@ -103,10 +109,50 @@ def dense_span(profile: np.ndarray, fraction: float = 0.12, min_gap: int = 40) -
     return best
 
 
-def _count_line_bands(lines: np.ndarray) -> int:
-    """文字行マスクの行方向プロファイルから、行の帯(連続して文字がある行の塊)の数を数える。"""
-    rows = (lines > 0).sum(axis=1) > 0
+def _count_line_bands(lines: np.ndarray, min_fraction: float = 0.15) -> int:
+    """文字行マスクの行方向プロファイルから、行の帯(連続して文字がある行の塊)の数を数える。
+
+    その行に幅の min_fraction 以上のインクがあるときだけ「文字がある行」とみなす。本文の行は
+    幅のほとんどを占めるが、図の線や罫線は1行あたりの画素が少ない。低い閾値だと図の縦線が
+    行間を埋めて1ページが1つの帯に繋がり、見開きなのに単ページと判定された。
+    """
+    width = max(lines.shape[1], 1)
+    rows = (lines > 0).sum(axis=1) >= width * min_fraction
     return int(np.count_nonzero(rows[1:] & ~rows[:-1]) + (1 if rows.size and rows[0] else 0))
+
+
+def detect_rotation(image_bgr: np.ndarray) -> int:
+    """写真を正立させるのに必要な時計回りの回転角(0/90/180/270)を返す。
+
+    本を横向きに構えて撮ると(見開きを画面いっぱいに入れるための自然な持ち方)、
+    写真の中で文字が縦に流れる。Tesseract の OSD(向きと文字体系の判定)を
+    半分の解像度で走らせて向きを決める。判定できなければ 0(回転しない)。
+    """
+    try:
+        import pytesseract
+    except ImportError:
+        return 0
+    small = cv2.resize(image_bgr, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+    try:
+        osd = pytesseract.image_to_osd(small, config="--psm 0")
+    except Exception:  # noqa: BLE001 — osd.traineddata が無い、文字が少なすぎる等
+        return 0
+    for line in osd.splitlines():
+        if line.startswith("Rotate:"):
+            try:
+                return int(line.split(":")[1].strip()) % 360
+            except ValueError:
+                return 0
+    return 0
+
+
+_ROTATIONS = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+
+
+def rotate_upright(image_bgr: np.ndarray, rotation: int) -> np.ndarray:
+    """detect_rotation の結果で画像を正立させる。"""
+    code = _ROTATIONS.get(rotation % 360)
+    return cv2.rotate(image_bgr, code) if code is not None else image_bgr
 
 
 @dataclass
