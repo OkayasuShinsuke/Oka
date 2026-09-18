@@ -34,8 +34,11 @@ class AppleVisionEngine:
 
     name = "apple_vision"
 
-    def __init__(self, languages: tuple[str, ...] = ("ja-JP", "en-US")) -> None:
+    def __init__(
+        self, languages: tuple[str, ...] = ("ja-JP", "en-US"), minimum_text_height: float = 0.008
+    ) -> None:
         self.languages = list(languages)
+        self.minimum_text_height = minimum_text_height
         self._unavailable_reason = self._probe()
         self._available = self._unavailable_reason == ""
 
@@ -83,12 +86,13 @@ class AppleVisionEngine:
         handler = self._make_handler(image)
 
         request = Vision.VNRecognizeTextRequest.alloc().init()
+        # revision は言語より先に決める。使える言語が revision によって変わるため
+        self._request_japanese_revision(request)
         request.setRecognitionLevel_(_LEVEL_ACCURATE)
         request.setRecognitionLanguages_(self.languages)
         request.setUsesLanguageCorrection_(True)
-        # 教科書の本文は十分な大きさなので、極端に小さい文字を拾わせて誤検出を増やさない
-        request.setMinimumTextHeight_(0.008)
-        self._request_japanese_revision(request)
+        # 既定の最小文字高は画像の1/32で、ページ全体の画像には大きすぎて本文を取りこぼす
+        request.setMinimumTextHeight_(self.minimum_text_height)
 
         success, error = handler.performRequests_error_([request], None)
         if not success:
@@ -105,16 +109,26 @@ class AppleVisionEngine:
 
     @staticmethod
     def _request_japanese_revision(request) -> None:
-        """日本語が使えるrevisionを明示する。古いpyobjcには無いので失敗は無視する。"""
+        """日本語が使えるrevisionを明示する。
+
+        supportedRevisions() が返すのは NSIndexSet で、Pythonのリストのようには
+        反復できない。containsIndex_ で問い合わせ、それも無ければ素直に設定を試みる。
+        どの経路も失敗したら既定のrevisionのまま進む(古いmacOSでは日本語が使えないが、
+        その場合は __init__ の判定ではじいている)。
+        """
+        supported = None
         try:
-            supported = list(type(request).supportedRevisions() or [])
+            supported = type(request).supportedRevisions()
         except Exception:  # noqa: BLE001 — pyobjcの版差
-            return
-        if _REVISION_JAPANESE in supported:
-            try:
-                request.setRevision_(_REVISION_JAPANESE)
-            except Exception:  # noqa: BLE001
-                pass
+            supported = None
+
+        if supported is not None and hasattr(supported, "containsIndex_"):
+            if not supported.containsIndex_(_REVISION_JAPANESE):
+                return
+        try:
+            request.setRevision_(_REVISION_JAPANESE)
+        except Exception:  # noqa: BLE001
+            pass
 
     @staticmethod
     def _make_handler(image: np.ndarray):

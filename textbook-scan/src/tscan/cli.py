@@ -219,7 +219,9 @@ def check(book_id: str = typer.Argument(...), output_dir: str | None = typer.Opt
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    test_ocr: bool = typer.Option(False, "--test-ocr", help="使えるエンジンで実際に日本語を読ませて結果を見せる"),
+) -> None:
     """依存関係・OCRエンジン・保存先の空き容量を診断する(§14.4)。"""
     import importlib
     import platform
@@ -250,6 +252,67 @@ def doctor() -> None:
     free_gb = usage.free / (1024**3)
     verdict = "[green]十分[/green]" if free_gb > 10 else "[yellow]不足の可能性[/yellow]"
     console.print(f"保存先 {root}: 空き容量 {free_gb:.1f}GB {verdict}(§16.1: 1冊あたり目安5.1GB)")
+
+    if test_ocr:
+        _run_ocr_selftest()
+
+
+_SELFTEST_SENTENCE = "磁場の中を運動する電荷には力がはたらく。"
+
+
+def _render_selftest_image():
+    """自己診断用に、日本語フォントで1行だけ描いた画像を作る。フォントが無ければ None。"""
+    from pathlib import Path as _Path
+
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+
+    candidates = [
+        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",
+    ]
+    font_path = next((p for p in candidates if _Path(p).exists()), None)
+    if font_path is None:
+        return None
+    image = Image.new("L", (1000, 140), 250)
+    ImageDraw.Draw(image).text((30, 40), _SELFTEST_SENTENCE, font=ImageFont.truetype(font_path, 48), fill=20)
+    return np.array(image)
+
+
+def _run_ocr_selftest() -> None:
+    """使えるエンジンすべてに同じ1行を読ませ、読めたかどうかを表示する(§9.2)。
+
+    インストール直後に「エンジンは見えているが実際には読めない」状態を切り分けるためのもの。
+    """
+    from tscan.evaluate import cer
+    from tscan.ocr.registry import build_text_engines
+
+    console.print("\n[bold]OCRの実動作確認[/bold]")
+    image = _render_selftest_image()
+    if image is None:
+        console.print("[yellow]日本語フォントが見つからないため実動作確認を省略しました[/yellow]")
+        return
+
+    console.print(f"読ませる文: [cyan]{_SELFTEST_SENTENCE}[/cyan]")
+    engines = build_text_engines(vertical=False, offline=True).engines
+    if not engines:
+        console.print("[red]利用可能な本文OCRエンジンがありません[/red]")
+        return
+
+    table = Table("エンジン", "結果", "文字誤り率", title="同じ1行を各エンジンに読ませた結果")
+    for engine in engines:
+        try:
+            text = "".join(line.text for line in engine.recognize(image, vertical=False))
+        except Exception as exc:  # noqa: BLE001 — 何が起きたかをそのまま見せる
+            table.add_row(engine.name, f"[red]失敗: {type(exc).__name__}: {exc}[/red]", "—")
+            continue
+        rate = cer(_SELFTEST_SENTENCE, text)
+        color = "green" if rate <= 0.05 else ("yellow" if rate <= 0.30 else "red")
+        table.add_row(engine.name, f"[{color}]{text or '(何も読めませんでした)'}[/{color}]", f"{rate * 100:.1f}%")
+    console.print(table)
+    console.print("  誤り率が [green]5%以下[/green] なら正常です。失敗と出た場合はそのメッセージが原因です。")
     console.print(f"既定の並列数: {default_workers()}(§15.1)")
 
 
