@@ -338,6 +338,15 @@ def single_substitution(fragment: str, word: str) -> tuple[str, str] | None:
     return diffs[0] if len(diffs) == 1 else None
 
 
+# 「漢字1文字違い」だけで誤読候補にしてよい専門用語の最小の長さ。
+# 短い語(2〜3文字)で許すと、偶然1文字違いの別の語を大量に拾う
+LONG_TERM_LENGTH = 3
+
+
+def _is_kanji(ch: str) -> bool:
+    return "\u4e00" <= ch <= "\u9fff"
+
+
 def context_score(text: str, lexicon: tuple[str, ...]) -> tuple[float, list[str], set[str]]:
     """辞書との整合性から (文脈スコア, 修正候補, 疑わしい文字の集合) を返す。
 
@@ -358,6 +367,16 @@ def context_score(text: str, lexicon: tuple[str, ...]) -> tuple[float, list[str]
     near_miss = 0
     exact = 0
 
+    # 辞書語がそのまま現れている位置を先に押さえる。そこに重なる「1文字違い」は
+    # 正しい語の一部を切り取っただけなので候補にしない
+    # (「運動方程式」の中の「運動方」を「運動量」の誤読だと言い出すのを防ぐ)。
+    covered: set[int] = set()
+    for word in lexicon:
+        start = text.find(word)
+        while start != -1:
+            covered.update(range(start, start + len(word)))
+            start = text.find(word, start + 1)
+
     for word in lexicon:
         if word in text:
             exact += 1
@@ -365,17 +384,30 @@ def context_score(text: str, lexicon: tuple[str, ...]) -> tuple[float, list[str]
         window = len(word)
         for i in range(0, max(len(text) - window + 1, 0)):
             fragment = text[i : i + window]
-            if not fragment:
+            if not fragment or covered & set(range(i, i + window)):
                 continue
             substitution = single_substitution(fragment, word)
             if substitution is None:
                 continue
             wrong, correct = substitution
-            if not is_confusable(wrong, correct):
-                continue  # 偶然の1文字違い。誤読ペアでなければ候補にしない
-            suggestions.append(
-                f"'{fragment}' は '{word}' の誤読かもしれません('{wrong}'→'{correct}', §11.1の混同ペア)"
-            )
+            if is_confusable(wrong, correct):
+                reason = "§11.1の混同ペア"
+            elif (
+                len(word) >= LONG_TERM_LENGTH
+                and _is_kanji(wrong)
+                and _is_kanji(correct)
+                and fragment not in lexicon
+            ):
+                # 実写真では、辞書にない任意の漢字同士の取り違えが起きる
+                # (磁性体→彼性体、絶縁体→多緑体、電気双極子→電気台板子)。
+                # 混同ペア台帳だけでは拾えないので、専門用語に限って「漢字1文字だけ違う」も
+                # 候補にする。誤りと判定する側(fragment)が辞書にある正しい語のときは対象外
+                # (「磁束密度」を「電束密度」の誤読だと言い出すのを防ぐ)。
+                # 違う1文字が両方とも漢字であることも条件にする(「運動す」→「運動量」を防ぐ)
+                reason = f"{LONG_TERM_LENGTH}文字以上の専門用語と漢字1文字違い"
+            else:
+                continue  # 偶然の1文字違い。短い語や仮名の違いは候補にしない
+            suggestions.append(f"'{fragment}' は '{word}' の誤読かもしれません('{wrong}'→'{correct}', {reason})")
             suspicious.add(wrong)
             near_miss += 1
             break
