@@ -248,7 +248,18 @@ def extract_nombre(gray: np.ndarray, engine, band_ratio: float = 0.10) -> int | 
     height, width = gray.shape[:2]
     band = max(int(height * band_ratio), 24)
 
-    bands = [gray[height - band :, :], gray[:band, :]]
+    # 帯は「画像の端」ではなく「印字されている範囲の端」から取る。
+    # 実写真では切り出しに紙の地色で塗った余白が付き、画像の下端10%が
+    # 真っ白になってノンブルを1件も読めなかった(実測13ページ中9ページ)。
+    top_ink, bottom_ink = _ink_extent(gray)
+    if top_ink is None or bottom_ink is None:
+        bands = [gray[height - band :, :], gray[:band, :]]
+    else:
+        pad = max(band // 5, 4)
+        bands = [
+            gray[max(bottom_ink - band, 0) : min(bottom_ink + pad, height), :],
+            gray[max(top_ink - pad, 0) : min(top_ink + band, height), :],
+        ]
     for region in bands:
         if region.size == 0:
             continue
@@ -271,6 +282,22 @@ def extract_nombre(gray: np.ndarray, engine, band_ratio: float = 0.10) -> int | 
             if number is not None:
                 return number
     return None
+
+
+def _ink_extent(gray: np.ndarray, min_fraction: float = 0.002) -> tuple[int | None, int | None]:
+    """印字されている範囲の上端・下端の行番号を返す。何も無ければ (None, None)。
+
+    紙の地色で塗った余白は真っ白なのでインクが無く、この範囲から外れる。
+    ごく少数の画素しかない行はノイズとみなして無視する。
+    """
+    import cv2
+
+    _, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    counts = (ink > 0).sum(axis=1)
+    rows = np.where(counts >= max(gray.shape[1] * min_fraction, 3))[0]
+    if rows.size == 0:
+        return None, None
+    return int(rows[0]), int(rows[-1])
 
 
 def _contains_japanese_text(region: np.ndarray, engine) -> bool:

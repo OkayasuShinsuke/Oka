@@ -164,6 +164,62 @@ class SpreadLayout:
     paper: np.ndarray  # 紙面マスク
 
 
+def _valley(profile: np.ndarray) -> tuple[int, float, float] | None:
+    """密度プロファイルの中央40%で最も低い位置を返す: (位置, 谷の値, 判定に使う閾値)。"""
+    lo, hi = int(len(profile) * 0.30), int(len(profile) * 0.70)
+    if hi - lo < 10:
+        return None
+    window = profile[lo:hi]
+    v = int(np.argmin(window))
+    left_peak = profile[:lo].max() if lo > 0 else 0
+    right_peak = profile[hi:].max() if hi < len(profile) else 0
+    if left_peak <= 0 or right_peak <= 0:
+        return None
+    return lo + v, float(window[v]), float(min(left_peak, right_peak)) * 0.25
+
+
+def find_gutter(lines: np.ndarray, x0: int, x1: int, max_tilt_deg: float = 8.0) -> int | None:
+    """文字行マスクからノド(見開きの中央の谷)のx座標を求める。単ページなら None。
+
+    本を手で持って撮ると、ノドは写真の中で少し傾く。まっすぐ縦に足し合わせるだけだと、
+    傾いた谷は隣の行の文字で埋まって浅くなり、見開きなのに単ページと判定される
+    (実測: 谷の値125に対し閾値92で不成立)。そこで画像を少しずつ横にずらして
+    (シアー変換)傾きを打ち消しながら探し、最も深い谷を採用する。
+
+    戻り値のx座標は画像の高さの中央での位置。切り出しは矩形なので、そこで左右に分ける。
+    """
+    band = lines[:, x0:x1]
+    if band.size == 0:
+        return None
+    h, w = band.shape
+    best: tuple[float, int] | None = None  # (谷の深さの比, x)
+    for tilt in np.arange(-max_tilt_deg, max_tilt_deg + 0.01, 2.0):
+        if tilt == 0:
+            warped = band
+        else:
+            t = float(np.tan(np.radians(tilt)))
+            matrix = np.float32([[1, -t, t * h / 2], [0, 1, 0]])
+            warped = cv2.warpAffine(band, matrix, (w, h), flags=cv2.INTER_NEAREST, borderValue=0)
+        profile = (warped > 0).sum(axis=0).astype(np.float64)
+        found = _valley(profile)
+        if found is None:
+            continue
+        pos, value, threshold = found
+        if value >= threshold:
+            continue
+        ratio = value / max(threshold, 1e-6)
+        if best is None or ratio < best[0]:
+            best = (ratio, pos)
+    if best is None:
+        return None
+
+    candidate = x0 + best[1]
+    # 谷の両側にそれぞれ3行以上の本文があること(1行だけの画像を見開きと誤認しない)
+    if _count_line_bands(lines[:, x0:candidate]) < 3 or _count_line_bands(lines[:, candidate:x1]) < 3:
+        return None
+    return candidate
+
+
 def analyze_spread(image_bgr: np.ndarray) -> SpreadLayout | None:
     """紙面・本文範囲・ノドの位置を求める。"""
     paper = paper_mask_hsv(image_bgr)
@@ -185,34 +241,16 @@ def analyze_spread(image_bgr: np.ndarray) -> SpreadLayout | None:
     # ただし紙面の形が縦長なら物理的に1ページなので、谷があっても見開きとしない
     # (1ページ内の見出しの隙間や段組の間を「ノド」と誤認するのを防ぐ)。
     # B5/A4/A5 の1ページは幅/高さ ≒ 0.71。見開きは本の厚み(上下に写るページの束)を含めても
-    # 実測で 0.89〜1.06 だったので、境界を 0.80 に置く
+    # 実測で 0.89〜1.18 だったので、境界を 0.80 に置く
     ys, xs = np.where(paper > 0)
     paper_aspect = (xs.max() - xs.min() + 1) / max(ys.max() - ys.min() + 1, 1)
-    inner = col_profile[x0:x1]
-    lo, hi = int(len(inner) * 0.30), int(len(inner) * 0.70)
-    if hi - lo < 10 or paper_aspect < 0.80:
+    if paper_aspect < 0.80:
         gutter = None
     else:
-        window = inner[lo:hi]
-        valley = int(np.argmin(window))
-        # 左右にしっかり本文があり、谷が両側の1/4以下なら見開き
-        left_peak = inner[:lo].max() if lo > 0 else 0
-        right_peak = inner[hi:].max() if hi < len(inner) else 0
-        candidate = x0 + lo + valley
-        if (
-            left_peak > 0
-            and right_peak > 0
-            and window[valley] < min(left_peak, right_peak) * 0.25
-            and _count_line_bands(lines[:, x0:candidate]) >= 3
-            and _count_line_bands(lines[:, candidate:x1]) >= 3
-        ):
-            # 谷の両側にそれぞれ3行以上の本文がある → 見開き。
-            # (1行だけの画像の語間の隙間や、図の余白を「ノド」と誤認しない)
-            gutter = candidate
-        else:
-            gutter = None
+        gutter = find_gutter(lines, x0, x1)
 
     return SpreadLayout(content_box=(x0, y0, x1, y1), gutter_x=gutter, paper=paper)
+
 
 
 # ---------------------------------------------------------------------------

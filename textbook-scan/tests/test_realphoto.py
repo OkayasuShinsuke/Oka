@@ -215,3 +215,33 @@ def test_paper_mask_keeps_colored_band_touching_page_edge():
     mask = paper_mask_hsv(photo)
     assert mask is not None
     assert mask[200, 900] == 255
+
+
+# --- 傾いたノドの検出 ---------------------------------------------------------
+
+
+def _tilt(image: np.ndarray, degrees: float) -> np.ndarray:
+    """画像を横方向にずらして、本を斜めに持って撮った状態を作る。"""
+    h, w = image.shape[:2]
+    t = np.tan(np.radians(degrees))
+    matrix = np.float32([[1, t, -t * h / 2], [0, 1, 0]])
+    return cv2.warpAffine(image, matrix, (w, h), borderValue=(235, 240, 245))
+
+
+def test_find_gutter_handles_tilted_spread():
+    """ノドが傾いた見開きでも分割できる。
+
+    まっすぐ縦に足し合わせるだけだと、傾いた谷が隣の行の文字で埋まって浅くなり、
+    見開きなのに単ページと判定された(実写真で実測)。
+    """
+    from tscan.realphoto import detect_spread
+
+    assert detect_spread(_tilt(_spread_photo(), 5.0)) == "spread"
+
+
+def test_find_gutter_returns_none_for_single_page():
+    from tscan.realphoto import find_gutter, paper_mask_hsv, text_line_mask
+
+    photo = _single_photo()
+    lines = text_line_mask(photo, paper_mask_hsv(photo))
+    assert find_gutter(lines, 0, photo.shape[1]) is None
