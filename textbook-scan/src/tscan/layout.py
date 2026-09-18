@@ -234,7 +234,7 @@ def format_ruby(base: str, ruby: str) -> str:
 _NOMBRE_PATTERN = re.compile(r"(?<!\d)(\d{1,4})(?!\d)")
 
 
-def extract_nombre(gray: np.ndarray, engine, band_ratio: float = 0.10) -> int | None:
+def extract_nombre(gray: np.ndarray, engine, band_ratio: float = 0.10, min_digits: int = 2) -> int | None:
     """ページ上下の帯を切り出してOCRし、ノンブルを読み取る(REQ-PAGECHK-01)。
 
     engine は recognize_text(image, vertical, psm, whitelist) を持つもの(TesseractEngine等)。
@@ -244,6 +244,9 @@ def extract_nombre(gray: np.ndarray, engine, band_ratio: float = 0.10) -> int | 
         - 数字だけを認識対象にする(whitelist)。ノンブルは数字しか来ないので誤読が大きく減る
         - 帯をさらに左・中央・右に分けて試す。ページ番号の位置は本によって違うため
         - 小さい文字は拡大してから読ませる(OCRは極端に小さい文字が苦手)
+        - min_digits 桁未満の数字は採用しない。実写真では「197」の一部だけを拾って
+          "7" を返し、存在しないページ抜けを報告してしまった。誤った番号は
+          「読めなかった」より害が大きいので、確信が持てない結果は捨てる(§7.5.1)
     """
     height, width = gray.shape[:2]
     band = max(int(height * band_ratio), 24)
@@ -278,7 +281,7 @@ def extract_nombre(gray: np.ndarray, engine, band_ratio: float = 0.10) -> int | 
         for crop in candidates:
             if crop.size == 0 or crop.shape[1] < 10:
                 continue
-            number = _read_digits(crop, engine)
+            number = _read_digits(crop, engine, min_digits=min_digits)
             if number is not None:
                 return number
     return None
@@ -309,8 +312,11 @@ def _contains_japanese_text(region: np.ndarray, engine) -> bool:
     return bool(_HIRAGANA.search(text) or _KATAKANA.search(text) or _KANJI.search(text))
 
 
-def _read_digits(crop: np.ndarray, engine) -> int | None:
-    """小さな領域から数字を読む。拡大・二値化してからpsm 7/8/13を順に試す。"""
+def _read_digits(crop: np.ndarray, engine, min_digits: int = 1) -> int | None:
+    """小さな領域から数字を読む。拡大・二値化してからpsm 7/8/13を順に試す。
+
+    min_digits 桁未満の結果は捨てる(数式番号や本文の数字の一部を拾わないため)。
+    """
     import cv2
 
     scale = max(1.0, 80.0 / max(crop.shape[0], 1))
@@ -332,15 +338,18 @@ def _read_digits(crop: np.ndarray, engine) -> int | None:
                 continue
         except Exception:
             continue
-        number = parse_nombre(text)
+        number = parse_nombre(text, min_digits=min_digits)
         if number is not None:
             return number
     return None
 
 
-def parse_nombre(text: str) -> int | None:
-    """OCRしたテキストからページ番号らしき数値を1つ取り出す。"""
-    candidates = _NOMBRE_PATTERN.findall(text or "")
+def parse_nombre(text: str, min_digits: int = 1) -> int | None:
+    """OCRしたテキストからページ番号らしき数値を1つ取り出す。
+
+    min_digits 桁未満の数字列は無視する。
+    """
+    candidates = [c for c in _NOMBRE_PATTERN.findall(text or "") if len(c) >= min_digits]
     if not candidates:
         return None
     # 行内に複数あるときは最も長い数字列(章番号より本文ページ番号が長いことが多い)

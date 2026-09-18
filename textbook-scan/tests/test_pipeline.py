@@ -159,3 +159,29 @@ def test_run_book_survives_broken_page(tmp_path: Path):
     assert len(results) == 2
     assert len(failures) == 1  # 壊れた1ページだけが失敗として報告される
     assert book.pages[0].blocks  # 正常なページは処理されている
+
+
+# --- Apple Vision(§9.2) -----------------------------------------------------
+
+
+def test_apple_vision_reports_why_it_is_unavailable():
+    """macOS以外では、使えない理由を日本語で説明して例外を投げる(黙って落ちない)。"""
+    import platform
+
+    from tscan.ocr.apple_vision import AppleVisionEngine
+
+    engine = AppleVisionEngine()
+    if platform.system() == "Darwin":
+        pytest.skip("macOS実機では利用可否が環境に依存するため、この確認は行わない")
+
+    assert engine.is_available is False
+    assert "macOS" in engine.unavailable_reason
+    with pytest.raises(RuntimeError, match="Apple Vision"):
+        engine.recognize(np.zeros((10, 10, 3), dtype=np.uint8))
+
+
+def test_apple_vision_is_listed_in_engine_availability():
+    """`tscan doctor` の一覧にApple Visionが出ること。"""
+    from tscan.ocr.registry import describe_availability
+
+    assert any("apple" in name.lower() for name in describe_availability())
