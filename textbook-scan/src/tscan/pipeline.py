@@ -202,13 +202,21 @@ def ocr_page(
         primary_lines, page_size=(gray.shape[1], gray.shape[0]), page_prefix=page_prefix, vertical=vertical
     )
 
-    # 副・第3エンジンの結果を、重なりの大きいブロックへ突き合わせ用に割り当てる(§11.2)
+    # 副・第3エンジンの結果を、重なりの大きいブロックへ突き合わせ用に割り当てる(§11.2)。
+    #
+    # 副エンジン自身の信頼度が低い行は突き合わせに使わない。実写真(APS-Cミラーレス)で
+    # Apple Vision(主)が信頼度0.9台で正しく読めているのに、Tesseract(副)がその写真では
+    # 低解像度・照明ムラでほぼ読めておらず(自己申告の信頼度も低い)、その乱れた文字列との
+    # 「不一致」だけを理由に91%のブロックが要確認になった(実測)。
+    # 副エンジンが「読めなかった」ことは、主エンジンを疑う根拠にはならない。
+    # 逆に、副エンジンが高い信頼度で違う読みを出したときは、これまでどおり不一致として扱う
+    # (両エンジンとも自信を持って食い違っている = 本当に疑わしい)。
     alternates: dict[str, list[str]] = {b.block_id: [] for b in blocks}
     for engine in text_engines.engines[1:]:
         other_lines = _recognize_with(engine, gray, vertical=vertical)
         for block in blocks:
             match = _best_overlap(block.bbox, other_lines)
-            if match is not None:
+            if match is not None and match.confidence >= MIN_ALTERNATE_CONFIDENCE:
                 alternates[block.block_id].append(match.text)
 
     # 数式ブロックは数式特化エンジンで読み直す(§9.3)
@@ -231,6 +239,11 @@ def ocr_page(
                 block.confidence = max(results[0].confidence, block.confidence)
 
     return blocks, vertical, alternates
+
+
+# この信頼度未満の副エンジンの読みは、突き合わせの対象から外す(上記コメント参照)。
+# Tesseractの単語信頼度・Apple Visionの行信頼度とも0〜1のスケールなので共通に使える。
+MIN_ALTERNATE_CONFIDENCE = 0.35
 
 
 def _best_overlap(bbox: tuple[int, int, int, int], lines: list):

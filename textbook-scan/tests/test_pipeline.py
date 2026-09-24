@@ -15,7 +15,9 @@ cv2 = pytest.importorskip("cv2")
 from tscan.models import Book, Page
 from tscan.ocr.registry import build_math_engines, build_text_engines, describe_availability
 from tscan.ocr.tesseract_engine import TesseractEngine
-from tscan.pipeline import PipelineContext, Stage, default_workers, run_book
+from tscan.ocr.base import OcrLine
+from tscan.ocr.registry import EngineSet
+from tscan.pipeline import PipelineContext, Stage, default_workers, ocr_page, run_book
 
 TESSERACT = shutil.which("tesseract") is not None
 requires_tesseract = pytest.mark.skipif(not TESSERACT, reason="tesseractが未インストール")
@@ -185,3 +187,61 @@ def test_apple_vision_is_listed_in_engine_availability():
     from tscan.ocr.registry import describe_availability
 
     assert any("apple" in name.lower() for name in describe_availability())
+
+
+# --- 副エンジンの信頼度によるアンサンブル除外(§11.2) -------------------------
+
+
+class _FakeEngine:
+    """テスト用の最小限のOCRエンジン。固定の行を返すだけ。"""
+
+    def __init__(self, name: str, lines: list[OcrLine]):
+        self.name = name
+        self._lines = lines
+
+    def recognize(self, image, vertical: bool = False) -> list[OcrLine]:
+        return self._lines
+
+
+_BBOX = (10, 10, 200, 30)
+
+
+def test_ocr_page_ignores_low_confidence_alternate():
+    """副エンジンが自信なく読んだ行は、主エンジンとの突き合わせに使わない。
+
+    実写真(APS-Cミラーレス)で、Apple Vision(主)が信頼度0.9台で正しく読めているのに、
+    Tesseract(副)が低解像度でほぼ読めず(自己申告の信頼度も低い)、その乱れた文字列との
+    「不一致」だけを理由に大半のブロックが要確認になった(実測)。副エンジンが読めなかった
+    ことは主エンジンを疑う根拠にならない、という判断をここで検証する。
+    """
+    primary = _FakeEngine(
+        "primary", [OcrLine(text="正しい文章です", bbox=_BBOX, confidence=0.94, engine="primary", kind="text")]
+    )
+    garbled_secondary = _FakeEngine(
+        "secondary",
+        [OcrLine(text="乱れたXY12", bbox=_BBOX, confidence=0.10, engine="secondary", kind="text")],
+    )
+    engines = EngineSet(primary=primary, secondary=garbled_secondary)
+
+    image = np.full((60, 260), 255, dtype=np.uint8)
+    blocks, _vertical, alternates = ocr_page(image, "p0001", engines, EngineSet())
+
+    assert len(blocks) == 1
+    assert alternates[blocks[0].block_id] == []  # 低信頼度なので突き合わせから除外される
+
+
+def test_ocr_page_keeps_confident_disagreeing_alternate():
+    """副エンジンが自信を持って違う読みを出したときは、これまでどおり突き合わせに使う。"""
+    primary = _FakeEngine(
+        "primary", [OcrLine(text="正しい文章です", bbox=_BBOX, confidence=0.94, engine="primary", kind="text")]
+    )
+    confident_secondary = _FakeEngine(
+        "secondary",
+        [OcrLine(text="違う読み方です", bbox=_BBOX, confidence=0.80, engine="secondary", kind="text")],
+    )
+    engines = EngineSet(primary=primary, secondary=confident_secondary)
+
+    image = np.full((60, 260), 255, dtype=np.uint8)
+    blocks, _vertical, alternates = ocr_page(image, "p0001", engines, EngineSet())
+
+    assert alternates[blocks[0].block_id] == ["違う読み方です"]
