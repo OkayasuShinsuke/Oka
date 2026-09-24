@@ -21,10 +21,14 @@ from tscan.realphoto import (
 )
 
 
-def _text_lines(canvas: np.ndarray, x0: int, x1: int, y0: int, y1: int, pitch: int = 24) -> None:
-    """本文の行を「細長い黒い帯」で模す(OCRは掛けないので文字である必要はない)。"""
+def _text_lines(canvas: np.ndarray, x0: int, x1: int, y0: int, y1: int, pitch: int = 20) -> None:
+    """本文の行を「細長い黒い帯」で模す(OCRは掛けないので文字である必要はない)。
+
+    行の高さと行送りの比は実際の本文に近づけてある(実写真の見開きでは、文字のある行が
+    ページの高さの40〜90%を占める)。細すぎる帯だと、どの実写真よりも文字が疎になる。
+    """
     for y in range(y0, y1, pitch):
-        cv2.rectangle(canvas, (x0, y), (x1, y + 8), (30, 30, 30), -1)
+        cv2.rectangle(canvas, (x0, y), (x1, y + 12), (30, 30, 30), -1)
 
 
 def _spread_photo(w: int = 1200, h: int = 900, with_box: bool = True) -> np.ndarray:
@@ -245,3 +249,45 @@ def test_find_gutter_returns_none_for_single_page():
     photo = _single_photo()
     lines = text_line_mask(photo, paper_mask_hsv(photo))
     assert find_gutter(lines, 0, photo.shape[1]) is None
+
+
+# --- 影になった紙・折り目で分断された見開き ------------------------------------
+
+
+def _shaded_spread_photo() -> np.ndarray:
+    """左ページが影に入って暗く写った見開き(片側からの照明)。折り目は暗い帯。
+
+    実写真で測った値に合わせてある: 明るい紙 172・影の紙 95 前後(どちらも彩度はほぼ0)。
+    """
+    h, w = 900, 1200
+    canvas = np.full((h, w, 3), (40, 90, 140), np.uint8)  # 木の机
+    cv2.rectangle(canvas, (100, 140), (590, 840), (95, 95, 95), -1)  # 影になった左ページ
+    cv2.rectangle(canvas, (630, 140), (1100, 840), (172, 172, 172), -1)  # 明るい右ページ
+    cv2.rectangle(canvas, (590, 140), (630, 840), (25, 25, 25), -1)  # 折り目の影
+    for y in range(230, 760, 30):  # 本文(行間に紙がしっかり残る密度)
+        cv2.rectangle(canvas, (150, y), (560, y + 10), (20, 20, 20), -1)
+        cv2.rectangle(canvas, (660, y), (1060, y + 10), (40, 40, 40), -1)
+    return canvas
+
+
+def test_paper_mask_includes_shaded_page():
+    """影で暗くなった紙も紙面に含める(白で塗りつぶして本文を消さない)。
+
+    実写真(APS-Cミラーレス、片側からの照明)で、左ページの左半分と右ページの
+    折り目側が「明るさ110未満」のため背景扱いされ、本文が白く塗りつぶされた。
+    """
+    mask = paper_mask_hsv(_shaded_spread_photo())
+    assert mask is not None
+    assert mask[185, 300] == 255  # 影になった左ページ(上の余白)
+    assert mask[455, 300] == 255  # 影になった左ページ(行間)
+    assert mask[185, 900] == 255  # 明るい右ページ
+    assert mask[870, 30] == 0  # 机は含めない
+
+
+def test_spread_split_by_dark_fold_keeps_both_pages():
+    """折り目の影で左右のページが分断されても、両方のページを紙面として残す。"""
+    pages = split_spread_photo(_shaded_spread_photo())
+    assert pages is not None and len(pages) == 2
+    (left, left_mask), (right, right_mask) = pages
+    assert (left_mask > 0).mean() > 0.5
+    assert (right_mask > 0).mean() > 0.5

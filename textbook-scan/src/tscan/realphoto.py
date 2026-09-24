@@ -24,6 +24,10 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 
+# 最大の紙の塊に対して、この割合以上の大きさの塊も紙面として採用する(見開きの両ページ)
+_MIN_PAGE_PIECE = 0.25
+
+
 def paper_mask_hsv(image_bgr: np.ndarray, max_saturation: int = 70, min_value: int = 110) -> np.ndarray | None:
     """「明るくて彩度が低い」領域のうち、画像中心を含む連結成分を紙面として返す。"""
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
@@ -42,16 +46,18 @@ def paper_mask_hsv(image_bgr: np.ndarray, max_saturation: int = 70, min_value: i
     count, labels = cv2.connectedComponents(paper)
     if count <= 1:
         return None
-    cy, cx = image_bgr.shape[0] // 2, image_bgr.shape[1] // 2
-    label = labels[cy, cx]
-    if label == 0:
-        # 中心が紙でなければ最大の成分を使う
-        sizes = np.bincount(labels.ravel())
-        sizes[0] = 0
-        label = int(sizes.argmax())
-    mask = (labels == label).astype(np.uint8) * 255
+    # 十分大きい紙の塊をすべて採用する。以前は「画像の中心を含む塊」だけを使っていたが、
+    # 折り目の影で左右のページが分断されると片方のページだけが残り、もう片方が
+    # 丸ごと白く塗りつぶされた(実測: APS-Cミラーレスの見開き)。
+    sizes = np.bincount(labels.ravel())
+    sizes[0] = 0
+    largest = int(sizes.max())
+    keep = [i for i in range(1, count) if sizes[i] >= largest * _MIN_PAGE_PIECE]
+    mask = np.isin(labels, keep).astype(np.uint8) * 255
     if (mask > 0).mean() < 0.10:
         return None
+
+    mask = _grow_into_shaded_paper(s, v, mask, max_saturation=max_saturation)
 
     # 内側の穴を全て埋める。青い数式ボックス・図版・見出し帯は彩度が高く
     # 「紙ではない」と判定されるが、それらは紙面の**内側**にある。
@@ -60,8 +66,10 @@ def paper_mask_hsv(image_bgr: np.ndarray, max_saturation: int = 70, min_value: i
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
         return None
+    largest_area = max(cv2.contourArea(c) for c in contours)
+    pages = [c for c in contours if cv2.contourArea(c) >= largest_area * _MIN_PAGE_PIECE]
     filled = np.zeros_like(mask)
-    cv2.drawContours(filled, [max(contours, key=cv2.contourArea)], -1, 255, thickness=cv2.FILLED)
+    cv2.drawContours(filled, pages, -1, 255, thickness=cv2.FILLED)
 
     # 閉処理でマスクは実際の紙より最大20px外側に広がる。その分を内側に寄せて、
     # 紙面の縁に机の暗い線が残らないようにする(残ると後段でノイズの塊として読まれる)
@@ -69,10 +77,52 @@ def paper_mask_hsv(image_bgr: np.ndarray, max_saturation: int = 70, min_value: i
     return filled
 
 
+def _grow_into_shaded_paper(
+    s: np.ndarray, v: np.ndarray, core: np.ndarray, max_saturation: int = 70, relative_value: float = 0.40
+) -> np.ndarray:
+    """確実な紙(core)から、影になって暗くなった紙へ紙面を広げる。
+
+    紙の判定を「明るさ110以上」の固定値だけで行うと、影に入った紙が背景扱いされ、
+    白で塗りつぶされて本文が消えた。実測(APS-Cミラーレス、片側からの照明):
+        明るい紙: 明るさ172・彩度4 / 折り目の影の紙: 明るさ95・彩度0 / 手: 彩度128
+    左ページの左半分と、右ページの折り目側が丸ごと塗りつぶされていた。
+
+    影になっても紙は「彩度が低い」ままなので、次の条件で広げる。
+        - 彩度が max_saturation 未満(手・机・籠と区別できる)
+        - 明るさが「この写真の紙の明るさ」の relative_value 倍より上
+          (固定値ではなく割合にして、暗く写った写真にも合わせる。
+           真っ暗な影や黒いマットは入らない)
+        - 確実な紙につながっている、またはページ並みに大きい
+          (離れた場所の小さな灰色の物は入らない)
+    """
+    paper_value = float(np.median(v[core > 0]))
+    candidate = ((s < max_saturation) & (v > paper_value * relative_value)).astype(np.uint8) * 255
+    candidate = cv2.morphologyEx(candidate, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+    candidate = cv2.bitwise_or(candidate, core)
+
+    _count, labels = cv2.connectedComponents(candidate)
+    connected = np.unique(labels[core > 0])
+    connected = connected[connected > 0]
+    # 確実な紙につながっていなくても、ページ並みに大きい塊は採用する。
+    # 片方のページが丸ごと影に入り、しかも暗い折り目で明るいページと分断されると、
+    # 影のページには「確実な紙」の種が1つも無いため(テストで確認)。
+    sizes = np.bincount(labels.ravel())
+    sizes[0] = 0
+    reference = int(sizes[connected].max()) if connected.size else 0
+    large = np.flatnonzero(sizes >= reference * _MIN_PAGE_PIECE) if reference else np.array([], dtype=int)
+    keep = np.union1d(connected, large[large > 0])
+    grown = np.isin(labels, keep).astype(np.uint8) * 255
+    return cv2.morphologyEx(grown, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (41, 41)))
+
+
 def text_line_mask(image_bgr: np.ndarray, paper: np.ndarray | None = None) -> np.ndarray:
     """文字行のマスク。暗い小さな成分を横方向に繋げて「行」の帯にする。"""
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-    _, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # 「周りより暗い画素」を文字とする(適応的二値化)。画像全体の暗さで判定すると、
+    # 折り目の影のような、なだらかに暗い領域まで文字扱いになり、ノドの谷が埋まって
+    # 見開きを検出できなかった(実測: APS-Cミラーレスの写真)。
+    block = max((min(gray.shape[:2]) // 30) | 1, 15)
+    ink = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block, 15)
     if paper is not None:
         ink = cv2.bitwise_and(ink, paper)  # 紙面内のインクだけ
 
@@ -107,6 +157,21 @@ def dense_span(profile: np.ndarray, fraction: float = 0.12, min_gap: int = 40) -
                 best = (start, i)
             start = None
     return best
+
+
+def _text_row_fraction(lines: np.ndarray, min_fraction: float = 0.05) -> float:
+    """文字行マスクで、幅の min_fraction 以上に文字がある行の割合(0〜1)。
+
+    見開きの両側に本文があるかの判定に使う。以前は「行の帯が3つ以上あるか」で判定したが、
+    湾曲したページでは行が斜めになって行間の隙間が消え、本文が1つの帯に数えられて
+    見開きを検出できなかった。割合なら行が斜めでも影響を受けない。
+    1行だけの画像(高さの1割強)は、この割合が小さいので除外できる。
+    """
+    if lines.size == 0:
+        return 0.0
+    width = max(lines.shape[1], 1)
+    rows = (lines > 0).sum(axis=1) >= width * min_fraction
+    return float(rows.mean())
 
 
 def _count_line_bands(lines: np.ndarray, min_fraction: float = 0.15) -> int:
@@ -214,8 +279,8 @@ def find_gutter(lines: np.ndarray, x0: int, x1: int, max_tilt_deg: float = 8.0) 
         return None
 
     candidate = x0 + best[1]
-    # 谷の両側にそれぞれ3行以上の本文があること(1行だけの画像を見開きと誤認しない)
-    if _count_line_bands(lines[:, x0:candidate]) < 3 or _count_line_bands(lines[:, candidate:x1]) < 3:
+    # 谷の両側に本文があること(文字のある行が高さの25%以上)。1行だけの画像を見開きと誤認しない
+    if _text_row_fraction(lines[:, x0:candidate]) < 0.25 or _text_row_fraction(lines[:, candidate:x1]) < 0.25:
         return None
     return candidate
 
@@ -247,7 +312,11 @@ def analyze_spread(image_bgr: np.ndarray) -> SpreadLayout | None:
     if paper_aspect < 0.80:
         gutter = None
     else:
-        gutter = find_gutter(lines, x0, x1)
+        # 「文字のある行の割合」の分母は紙面の高さにする(画像全体だと、本の上下に写った
+        # 机まで分母に入り、背景が多く写った写真ほど見開きと判定されにくくなる)
+        rows_with_paper = np.flatnonzero(paper.any(axis=1))
+        top, bottom = int(rows_with_paper[0]), int(rows_with_paper[-1]) + 1
+        gutter = find_gutter(lines[top:bottom], x0, x1)
 
     return SpreadLayout(content_box=(x0, y0, x1, y1), gutter_x=gutter, paper=paper)
 
