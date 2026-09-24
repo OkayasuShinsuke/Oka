@@ -100,6 +100,42 @@ pip install -e ".[dev,apple-vision]"
 >
 > これで直らない場合は `brew reinstall python@3.11` を試してから、
 > 上のやり直し手順をもう一度実行してください。
+>
+> **さらに `truststore` 関連のエラー
+> (`ValueError: invalid literal for int() with base 10: ''`、
+> `pip/_vendor/truststore/_macos.py` を含む)が出る場合**: pipが内部でmacOSの
+> バージョンを調べる際に失敗しています。まず原因を確認します。
+>
+> ```bash
+> python3 -c "import platform; print(repr(platform.mac_ver()))"
+> ```
+>
+> `('', ('', '', ''), '')` のように空で返ってきたら、`SYSTEM_VERSION_COMPAT`
+> という環境変数のせいでmacOSのバージョンが正しく取得できていません。
+> 一時的に外してから、pipの入れ直しをやり直します。
+>
+> ```bash
+> unset SYSTEM_VERSION_COMPAT
+> rm -rf .venv
+> python3.11 -m venv --without-pip .venv
+> source .venv/bin/activate
+> curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+> pip install --upgrade pip
+> pip install -e ".[dev,apple-vision]"
+> ```
+>
+> `unset` はこのターミナルの間だけ有効です。それでも空のままなら、
+> 新しいpipが自動で有効にする `truststore` を使わない、少し前のpipを
+> 明示的に入れて回避します。
+>
+> ```bash
+> rm -rf .venv
+> python3.11 -m venv --without-pip .venv
+> source .venv/bin/activate
+> curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+> python3 /tmp/get-pip.py "pip<24.3"
+> pip install -e ".[dev,apple-vision]"
+> ```
 
 最後の行の意味:
 
@@ -268,6 +304,7 @@ tscan evaluate physics_2026 --ground-truth ~/ground_truth.json
 |---|---|
 | `command not found: tscan` / `command not found: pip` | `source .venv/bin/activate` を忘れている。それでも直らなければ手順4の `ensurepip` の回避策を実行 |
 | `ensurepip ... returned non-zero exit status 1` | Homebrewのpython@3.11に同梱のensurepipが壊れている。手順4の回避策(`--without-pip` + `get-pip.py`)を実行 |
+| `truststore` / `platform.mac_ver()` 関連のエラー | pipがmacOSのバージョンを取得できていない。手順4の回避策(`SYSTEM_VERSION_COMPAT`を外す、または`pip<24.3`を明示指定)を実行 |
 | `tesseractが見つかりません` | `brew install tesseract tesseract-lang` を実行 |
 | `apple_vision` が有効にならない | 手順5の表を参照 |
 | HEICが読めない | `pip install pillow-heif` を実行(通常は手順4で入ります) |
