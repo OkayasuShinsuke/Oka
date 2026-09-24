@@ -67,16 +67,37 @@ def detect_page_gaps(nombres: list[int | None]) -> list[str]:
     ノンブルが読めなかったページがある場合、その枚数を考慮して判定する。
     例: [87, None, 89] は「87の次が89」ではなく「間に1枚(読めなかったページ)がある」ので
         抜けではない。これを考慮しないと、実在するページを毎回「抜け」と誤報してしまう。
+
+    同一のノンブル値が3回以上真に連続する場合は、OCRが紙面下端の何かを毎回同じ値に
+    誤読している疑いが強いため「重複ページ」ではなく「OCR誤読の疑い」として1件だけ
+    警告し、その区間は読めなかったページと同様に扱って以降の抜け判定に反映する。
     """
     issues: list[str] = []
     prev_value: int | None = None
     prev_index: int | None = None
     unread_between = 0  # 直前の判読できたページから、ここまでに読めなかった枚数
+    index = 0
+    n = len(nombres)
 
-    for index, value in enumerate(nombres):
+    while index < n:
+        value = nombres[index]
         if value is None:
             issues.append(f"p{index + 1:04d}: ノンブルを読めませんでした(目視確認)")
             unread_between += 1
+            index += 1
+            continue
+
+        run_end = index
+        while run_end + 1 < n and nombres[run_end + 1] == value:
+            run_end += 1
+        run_len = run_end - index + 1
+
+        if run_len >= 3:
+            issues.append(
+                f"p{index + 1:04d}-p{run_end + 1:04d}: 同じノンブル({value})が{run_len}回連続 — OCR誤読の疑い(目視確認)"
+            )
+            unread_between += run_len
+            index = run_end + 1
             continue
 
         if prev_value is not None:
@@ -95,6 +116,7 @@ def detect_page_gaps(nombres: list[int | None]) -> list[str]:
         prev_value = value
         prev_index = index
         unread_between = 0
+        index += 1
 
     return issues
 

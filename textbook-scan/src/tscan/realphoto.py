@@ -356,9 +356,18 @@ def fill_outside_paper(image_bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def _page_crop(
-    image_bgr: np.ndarray, paper: np.ndarray, x_range: tuple[int, int], y_range: tuple[int, int], margin: float = 0.03
+    image_bgr: np.ndarray,
+    paper: np.ndarray,
+    x_range: tuple[int, int],
+    y_range: tuple[int, int],
+    margin: float = 0.03,
+    bottom_margin: float = 0.08,
 ) -> tuple[np.ndarray, np.ndarray]:
     """指定範囲の紙面を、周囲に少し余白を付けて切り出す。紙面外は紙の地色で塗る。
+
+    下端(y1側)だけ margin より広い bottom_margin を使う。ノンブルは紙面下端近くに
+    印字されるが、紙面マスクは湾曲・影・レンズ歪みで下端をわずかに過小推定しやすく、
+    そのままだとノンブルが切り出し画像から欠落してしまうため。
 
     戻り値: (切り出した画像, 対応する紙面マスク)。マスクは後段の湾曲補正が輪郭を辿るのに使う。
     """
@@ -366,8 +375,9 @@ def _page_crop(
     x0, x1 = x_range
     y0, y1 = y_range
     mx, my = int((x1 - x0) * margin), int((y1 - y0) * margin)
+    my_bottom = int((y1 - y0) * bottom_margin)
     x0, x1 = max(x0 - mx, 0), min(x1 + mx, w)
-    y0, y1 = max(y0 - my, 0), min(y1 + my, h)
+    y0, y1 = max(y0 - my, 0), min(y1 + my_bottom, h)
 
     crop = image_bgr[y0:y1, x0:x1].copy()
     mask_crop = paper[y0:y1, x0:x1]

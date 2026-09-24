@@ -12,6 +12,7 @@ cv2 = pytest.importorskip("cv2")
 from tscan.models import Book, Page
 from tscan.pipeline import expand_spreads
 from tscan.realphoto import (
+    _page_crop,
     analyze_spread,
     dense_span,
     detect_spread,
@@ -291,3 +292,16 @@ def test_spread_split_by_dark_fold_keeps_both_pages():
     (left, left_mask), (right, right_mask) = pages
     assert (left_mask > 0).mean() > 0.5
     assert (right_mask > 0).mean() > 0.5
+
+
+def test_page_crop_extends_bottom_margin_further_than_other_sides():
+    """下端(ノンブル側)は margin より広い bottom_margin で拡張されることを確認する。"""
+    image = np.full((300, 200, 3), (235, 240, 245), np.uint8)
+    paper = np.zeros((300, 200), np.uint8)
+    paper[50:250, 30:170] = 255  # 紙面
+
+    crop, _mask = _page_crop(image, paper, (30, 170), (50, 250))
+
+    # margin(3%)のみなら下端拡張は 200*0.03=6px だが、bottom_margin(8%)では 200*0.08=16px。
+    # symmetric marginでの拡張分より明らかに大きく下端が拡張されていることを確認する。
+    assert crop.shape[0] > 200 + int(200 * 0.03) + 2
