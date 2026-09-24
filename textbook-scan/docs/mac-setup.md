@@ -84,6 +84,23 @@ pip install --upgrade pip
 pip install -e ".[dev,apple-vision]"
 ```
 
+> **`ensurepip ... returned non-zero exit status 1` と出て `pip`/`tscan` が
+> `command not found` になる場合**: Homebrewの `python@3.11` に入っている
+> ensurepip(pipを内蔵する仕組み)が壊れている状態です。作りかけの `.venv` を
+> 消して、pipを内蔵させずに作り直し、外部から入れ直します。
+>
+> ```bash
+> rm -rf .venv
+> python3.11 -m venv --without-pip .venv
+> source .venv/bin/activate
+> curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+> pip install --upgrade pip
+> pip install -e ".[dev,apple-vision]"
+> ```
+>
+> これで直らない場合は `brew reinstall python@3.11` を試してから、
+> 上のやり直し手順をもう一度実行してください。
+
 最後の行の意味:
 
 | 部分 | 意味 |
@@ -249,7 +266,8 @@ tscan evaluate physics_2026 --ground-truth ~/ground_truth.json
 
 | 症状 | 原因と対処 |
 |---|---|
-| `command not found: tscan` | `source .venv/bin/activate` を忘れている |
+| `command not found: tscan` / `command not found: pip` | `source .venv/bin/activate` を忘れている。それでも直らなければ手順4の `ensurepip` の回避策を実行 |
+| `ensurepip ... returned non-zero exit status 1` | Homebrewのpython@3.11に同梱のensurepipが壊れている。手順4の回避策(`--without-pip` + `get-pip.py`)を実行 |
 | `tesseractが見つかりません` | `brew install tesseract tesseract-lang` を実行 |
 | `apple_vision` が有効にならない | 手順5の表を参照 |
 | HEICが読めない | `pip install pillow-heif` を実行(通常は手順4で入ります) |
