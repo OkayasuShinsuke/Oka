@@ -212,6 +212,49 @@ def test_detect_rotation_on_sideways_photo():
     assert detect_rotation(cv2.rotate(upright, cv2.ROTATE_90_CLOCKWISE)) in (90, 270)
 
 
+def test_detect_rotation_retries_at_full_resolution_when_half_resolution_osd_fails(monkeypatch):
+    """半解像度のOSDが失敗(Rotate行なし)しても、フル解像度で成功すればその値を使う。"""
+    pytest.importorskip("pytesseract")
+    import pytesseract
+
+    from tscan.realphoto import detect_rotation
+
+    photo = _spread_photo()
+    calls: list[np.ndarray] = []
+
+    def fake_osd(image, config=""):
+        calls.append(image)
+        # 1回目(半解像度)は文字が読めなかった体で失敗、2回目(フル解像度)で成功させる。
+        if len(calls) == 1:
+            return "Orientation confidence: 0.00\nScript confidence: 0.00\n"
+        return "Orientation in degrees: 180\nRotate: 180\nOrientation confidence: 5.00\n"
+
+    monkeypatch.setattr(pytesseract, "image_to_osd", fake_osd)
+    assert detect_rotation(photo) == 180
+    assert len(calls) == 2  # 半解像度→フル解像度の順に1回ずつだけ呼ばれる
+    assert calls[0].shape[0] == photo.shape[0] // 2  # 1回目は半解像度
+    assert calls[1].shape == photo.shape  # 2回目はフル解像度
+
+
+def test_detect_rotation_falls_back_to_zero_when_both_attempts_fail(monkeypatch):
+    """半解像度・フル解像度の両方でOSDが失敗したら、0(回転なし)にフォールバックする。"""
+    pytest.importorskip("pytesseract")
+    import pytesseract
+
+    from tscan.realphoto import detect_rotation
+
+    photo = _spread_photo()
+    calls: list[np.ndarray] = []
+
+    def fake_osd(image, config=""):
+        calls.append(image)
+        raise RuntimeError("osd.traineddata が無い")
+
+    monkeypatch.setattr(pytesseract, "image_to_osd", fake_osd)
+    assert detect_rotation(photo) == 0
+    assert len(calls) == 2  # フル解像度への再試行は1回だけで打ち切る
+
+
 def test_paper_mask_keeps_colored_band_touching_page_edge():
     """ページ上端に接した青い帯(公式ボックス)は、輪郭の切れ込みになっても紙面に含める。"""
     photo = _spread_photo(with_box=False)
