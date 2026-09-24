@@ -160,7 +160,7 @@ tscan pages insert physics_2026 --after 150 --image retake.jpg
 | Markdown+LaTeX / JSON / 品質レポート | ✅ 動作確認済み | §13.2〜13.4 |
 | 精度評価(CER・数式行正解率・レビュー率) | ✅ 動作確認済み | §11.8, §18 |
 | 途中工程からの再開(`--from`)・並列処理 | ✅ 動作確認済み | REQ-PRE-01, §15 |
-| Apple Vision連携 | 🟡 実装済み。macOS実機での疎通は未検証(この環境はLinux) | §9.2 |
+| Apple Vision連携 | ✅ macOS実機(macOS 26 Tahoe)で疎通確認済み。`tscan doctor --test-ocr` で0%の誤り率を確認 | §9.2 |
 | yomitoku連携 | 🔴 実モデルでの検証未実施。骨格のみ | §9.2 |
 | Mathpix連携 | 🟡 実装済みだが実APIキーでの疎通は未検証 | §9.2 |
 | DeepSeek-OCR連携 | 🔴 未実装(横書きのみ採用の方針, §9.4) | §9.4 |
