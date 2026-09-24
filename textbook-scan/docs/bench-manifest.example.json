@@ -1,0 +1,25 @@
+{
+  "photos": [
+    {
+      "file": "photos/iphone/IMG_8627.HEIC",
+      "set": "iphone",
+      "split": "train",
+      "snippets": [
+        "ビオ・サバールの法則は，まだ電流が荷電粒子の流れであることも，磁場が動く電荷によって作られることもわからなかった時代に，試行錯誤によって発見されました。",
+        "電流が作る磁場の向きは，右ねじの法則で決まります。"
+      ]
+    },
+    {
+      "file": "photos/iphone/IMG_8630.HEIC",
+      "set": "iphone",
+      "split": "holdout",
+      "snippets": ["ここに本文を2〜3文そのまま書き写す。", "別の場所からもう1文。"]
+    },
+    {
+      "file": "photos/apsc/DSC00016.jpg",
+      "set": "apsc",
+      "split": "train",
+      "snippets": ["ここに本文を2〜3文そのまま書き写す。"]
+    }
+  ]
+}

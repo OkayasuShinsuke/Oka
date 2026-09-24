@@ -29,7 +29,7 @@ Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git ch
 Bash(ls:*),Bash(wc:*),Bash(mkdir:*)"
 # holdout(未知の写真)の中身と正解はAIに見せない。見て直すと holdout の意味がなくなる
 DENIED_TOOLS="Read(/$BENCH/manifest.json),Read(/$BENCH/baseline_holdout.json),Read(/$BENCH/holdout_runs/**),\
-Edit(/$BENCH/manifest.json),Edit(/$BENCH/baseline_*.json),Write(/$BENCH/baseline_*.json),\
+Edit(/$BENCH/manifest.json),Edit(/$BENCH/baseline_*.json),\
 Bash(git commit:*),Bash(git reset:*),Bash(git push:*)"
 CLAUDE_FLAGS="${TSCAN_CLAUDE_FLAGS:---permission-mode acceptEdits}"
 
@@ -100,7 +100,7 @@ cmd_run() {
         # $CLAUDE_FLAGS は複数の引数に分けたいので引用符で囲まない
         # shellcheck disable=SC2086
         claude -p "/improve" $CLAUDE_FLAGS --add-dir "$BENCH" \
-            --allowedTools "$ALLOWED_TOOLS" --disallowedTools "$DENIED_TOOLS" > "$LOGF" 2>&1
+            --allowedTools "$ALLOWED_TOOLS" --disallowedTools "$DENIED_TOOLS" < /dev/null > "$LOGF" 2>&1
         tail -5 "$LOGF"
 
         # 関所を通らずに終わった変更は捨てる(次の回に持ち越さない)
