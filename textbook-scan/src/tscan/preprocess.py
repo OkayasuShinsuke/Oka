@@ -314,6 +314,40 @@ def flatten_illumination(
     return normalized
 
 
+def stretch_contrast(
+    gray: np.ndarray, ink_target: int = 90, apply_above: int = 120, min_gap: float = 15.0
+) -> np.ndarray:
+    """文字が薄すぎるときだけ、文字を適度な濃さに戻す(P7.5)。
+
+    照明補正(P7)は「紙を白くする」割り算なので、紙と一緒に文字も同じ割合で明るくなる。
+    暗く写った低コントラストの写真(実測: APS-Cミラーレスで文字119・紙159)では、
+    補正後の文字が145の薄いグレーになり、PDFで見ると文章が白飛びして消えたように見えた。
+
+    Otsuの二値化で文字と紙を分け、文字の中央値が apply_above より明るいときだけ
+        文字の中央値 → ink_target(既定90)
+        紙の中央値   → 255(白)
+    に写す直線で引き伸ばす。
+
+    文字を真っ黒(30)まで引き伸ばす版も試したが、もともと十分濃い写真(iPhone、文字103)で
+    線が太って隣の画と潰れ、CERが10.0%→16.3%に悪化した。そこで、
+      - 文字がすでに十分濃い画像には何もしない(apply_above で判定)
+      - 薄い画像も、iPhoneで良く読めていた濃さ(約90〜100)までにとどめる
+    という形にしている。合成画像のような真っ黒な文字にも影響しない。
+    """
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    ink = gray[binary == 0]
+    paper = gray[binary > 0]
+    if ink.size < gray.size * 0.002 or paper.size == 0:
+        return gray
+    lo = float(np.median(ink))
+    hi = float(np.median(paper))
+    if lo <= apply_above or hi - lo < min_gap:
+        return gray
+    scale = (255.0 - ink_target) / (hi - lo)
+    out = (gray.astype(np.float32) - lo) * scale + ink_target
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
 # ---------------------------------------------------------------------------
 # P8: ノイズ除去・シャープ化 / P9: リサイズ正規化
 # ---------------------------------------------------------------------------

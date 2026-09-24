@@ -165,6 +165,7 @@ def preprocess_page(page: Page, ctx: PipelineContext, page_index: int) -> tuple[
         warnings.append(f"DARK_BOXES_INVERTED:{boxes}")
     gray = preprocess.flatten_illumination(gray)  # P7
     gray = preprocess.denoise_and_sharpen(gray)  # P8
+    gray = preprocess.stretch_contrast(gray)  # P7.5: 文字を黒に戻す(暗い写真の白飛び対策)
     return gray, warnings
 
 

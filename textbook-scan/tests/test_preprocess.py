@@ -13,6 +13,7 @@ from tscan.preprocess import (
     flatten_illumination,
     invert_dark_boxes,
     split_spread,
+    stretch_contrast,
 )
 
 
@@ -130,3 +131,32 @@ def test_flatten_illumination_keeps_contrast_inside_dark_figure():
     out = flatten_illumination(gray)
     assert out[150, 150] < 160  # 割り算で255付近まで持ち上がらない
     assert out[50, 50] > 240  # 紙は白のまま
+
+
+# --- P7.5: 薄くなった文字を戻す ------------------------------------------------
+
+
+def _page_with_text(ink: int, paper: int) -> np.ndarray:
+    gray = np.full((300, 400), paper, dtype=np.uint8)
+    for y in range(40, 260, 40):
+        cv2.putText(gray, "abcdefgh", (20, y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, ink, 2)
+    return gray
+
+
+def _ink_median(gray: np.ndarray) -> float:
+    t, _ = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return float(np.median(gray[gray < t]))
+
+
+def test_stretch_contrast_darkens_washed_out_text():
+    """暗い写真を照明補正すると文字が薄いグレーになる(実測: APS-Cで145)。それを濃く戻す。"""
+    washed = _page_with_text(ink=150, paper=250)
+    out = stretch_contrast(washed)
+    assert _ink_median(out) < 110
+    assert out[5, 5] >= 250  # 紙は白のまま
+
+
+def test_stretch_contrast_leaves_well_exposed_text_alone():
+    """もともと十分濃い文字には何もしない(黒くしすぎると線が潰れてCERが悪化した)。"""
+    good = _page_with_text(ink=90, paper=240)
+    assert np.array_equal(stretch_contrast(good), good)
