@@ -18,7 +18,7 @@
 - `src/tscan/models.py`, `config.py` — データモデルと設定
 - `config/default.yaml`, `config/confusion_pairs.yaml` — 既定設定・混同ペア台帳(誤読候補判定用)
 - `tools/make_sample_page.py`, `tools/simulate_book_photo.py` — テスト用サンプル画像生成
-- `tests/` — pytest一式(127件)
+- `tests/` — pytest一式(147件)
 - `docs/textbook-scan-spec.md`(仕様書), `docs/mac-setup.md`(macOSセットアップ手順)
 
 ## 実行方法
@@ -40,11 +40,11 @@ pytest tests/ -v   # tesseract未導入環境ではOCR関連テストは自動�
 ## 完成済みの機能
 取り込み・ページ管理・前処理・実写真向け補正(README「実装状況」表参照)・Tesseract OCR・
 レイアウト解析・品質保証5層・レビューUI・各種出力(PDF/MD/JSON/レポート)・精度評価。
-Apple VisionはmacOS実機で疎通確認済み。
+Apple Visionは`tscan run`の主エンジンとして統合済み・実機で動作確認(合成3ページCER 3.48%)。
 
 ## 未完成・既知のバグ
-- **実写真でのOCR精度が未達**(§11.8基準): Tesseract単独では特定の漢字が別の漢字に誤認識される
-  (日本語モデルの限界。解像度・前処理の問題ではない)
+- **実写真でのOCR精度が未達**(§11.8基準): Apple Vision統合後も合成画像でCER 3.48%どまり
+  (§11.8基準0.5%未達)。θ→8のような数式記号の誤認識が主因。実写真での再検証は未実施
 - **実写真のノンブルがほぼ読めない**(切り出しがページ下端まで届かない) → ページ抜け検出が実写真では未使用
 - yomitoku連携は骨格のみ、実モデル未検証
 - Mathpix連携は実装済みだが実APIキーでの疎通未検証
@@ -52,7 +52,8 @@ Apple VisionはmacOS実機で疎通確認済み。
 - 表の構造化抽出・DeepSeek-OCR連携は未実装(方針としてv2送り/対象外)
 
 ## 次にやるべきタスク(優先順)
-1. Apple Visionをアンサンブルの主エンジンとして`tscan run`に本格統合し、実写真CERを§11.8基準(≦0.5%)に近づける
+1. Apple Vision統合後に見つかったレイアウトバグ(式番号の孤立・ノンブルのfooter誤判定)修正を
+   実写真でも再検証する(合成画像では1.39%→9.76%→3.48%まで改善したが実写真は未検証)
 2. yomitokuを実モデルで検証し、縦書き・実データでの精度を確認する
 3. 実写真でのノンブル認識(紙面切り出しの下端拡張)を改善し、ページ抜け検出を実写真で使えるようにする
 4. Mathpixを実APIキーで疎通確認する

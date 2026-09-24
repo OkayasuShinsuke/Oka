@@ -116,6 +116,27 @@ def is_centered(bbox: tuple[int, int, int, int], page_width: int, tolerance: flo
     return abs(left_margin - right_margin) <= page_width * tolerance
 
 
+def _rows_overlap(a: tuple[int, int, int, int], b: tuple[int, int, int, int], min_fraction: float = 0.3) -> bool:
+    """2つのbboxが縦方向に十分重なっている(同じ行とみなせる)か。"""
+    _, ay, _, ah = a
+    _, by, _, bh = b
+    top = max(ay, by)
+    bottom = min(ay + ah, by + bh)
+    overlap = max(0, bottom - top)
+    return overlap >= min_fraction * min(ah, bh) if min(ah, bh) > 0 else False
+
+
+def _union_bbox(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    """2つのbboxを囲む最小矩形。"""
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    x = min(ax, bx)
+    y = min(ay, by)
+    right = max(ax + aw, bx + bw)
+    bottom = max(ay + ah, by + bh)
+    return (x, y, right - x, bottom - y)
+
+
 # ---------------------------------------------------------------------------
 # §10.3 縦書き判定と読み順
 # ---------------------------------------------------------------------------
@@ -371,7 +392,7 @@ def estimate_body_line_height(lines: list[OcrLine], vertical: bool = False) -> f
     return float(statistics.median(sizes))
 
 
-def classify_header_footer(bbox: tuple[int, int, int, int], page_height: int, band_ratio: float = 0.07) -> BlockKind | None:
+def classify_header_footer(bbox: tuple[int, int, int, int], page_height: int, band_ratio: float = 0.10) -> BlockKind | None:
     """ページ上下の帯にある短い行をヘッダ/フッタとみなす(§10.1)。"""
     _, y, _, h = bbox
     band = page_height * band_ratio
@@ -416,6 +437,33 @@ def detect_figure_regions(
     return figures
 
 
+def _merge_stray_equation_numbers(lines: list[OcrLine]) -> list[OcrLine]:
+    """式番号だけの行(例:「（3.14）」)が本文/数式と別行で返された場合、
+    直前の同じ行(y位置が重なる行)に結合する。
+
+    Apple Visionは1行の中で離れた位置にある文字列を別々の行として返すことがあり、
+    Tesseractが1行として返す「F = ma (3.15)」のような式番号付き数式が分裂してしまう。
+    分裂したままだと式番号が独立した body_text ブロックとして残り、CERを悪化させる。
+    """
+    merged: list[OcrLine] = []
+    for line in lines:
+        stripped = line.text.strip()
+        formula_part, eq_num = split_equation_number(stripped)
+        is_solo_eq_number = bool(eq_num) and not formula_part
+        if is_solo_eq_number and merged and _rows_overlap(merged[-1].bbox, line.bbox):
+            prev = merged[-1]
+            merged[-1] = OcrLine(
+                text=f"{prev.text.rstrip()} {stripped}".strip(),
+                bbox=_union_bbox(prev.bbox, line.bbox),
+                confidence=min(prev.confidence, line.confidence),
+                engine=prev.engine,
+                kind=prev.kind,
+            )
+        else:
+            merged.append(line)
+    return merged
+
+
 # ---------------------------------------------------------------------------
 # 行 -> Block への変換(パイプラインの中核)
 # ---------------------------------------------------------------------------
@@ -432,6 +480,7 @@ def lines_to_blocks(
     戻り値: (blocks, vertical, ruby_map)
     """
     width, height = page_size
+    lines = _merge_stray_equation_numbers(lines)
     if vertical is None:
         vertical = is_vertical_layout(lines)
 
