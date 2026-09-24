@@ -43,12 +43,13 @@ brew --version
 ## 2. Python と OCRエンジンを入れる
 
 ```bash
-brew install python@3.11 tesseract tesseract-lang
+brew install python@3.11 tesseract tesseract-lang uv
 ```
 
 - `tesseract` が日本語OCRの本体、`tesseract-lang` が日本語(縦書き含む)のモデルです
 - Apple Vision は macOS に最初から入っているので、追加インストールは不要です
   (連携用のライブラリは手順4で入れます)
+- `uv` はPython環境を作るためのツールです(手順4で使います)
 
 日本語モデルが入ったか確認します。`jpn` と `jpn_vert` が並んでいればOKです。
 
@@ -75,67 +76,17 @@ cd textbook-scan
 ## 4. Python環境を作ってインストール
 
 `venv` は「このプロジェクト専用のPython置き場」です。Macに元から入っている
-Pythonを汚さずに済むので、必ず作ります。
+Pythonを汚さずに済むので、必ず作ります。ここでは `uv`(手順2で入れたツール)を使います。
+標準の `python3.11 -m venv` + `pip` は、macOS 26 (Tahoe) 環境で
+Homebrewのensurepip/pipが内部で使う `truststore` というライブラリが正しく
+動かず、何をしても `pip` が入らないことを確認しています。`uv` はこの仕組みに
+依存しないので、その問題を丸ごと回避できます。
 
 ```bash
-python3.11 -m venv .venv
+uv venv --python 3.11 .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[dev,apple-vision]"
+uv pip install -e ".[dev,apple-vision]"
 ```
-
-> **`ensurepip ... returned non-zero exit status 1` と出て `pip`/`tscan` が
-> `command not found` になる場合**: Homebrewの `python@3.11` に入っている
-> ensurepip(pipを内蔵する仕組み)が壊れている状態です。作りかけの `.venv` を
-> 消して、pipを内蔵させずに作り直し、外部から入れ直します。
->
-> ```bash
-> rm -rf .venv
-> python3.11 -m venv --without-pip .venv
-> source .venv/bin/activate
-> curl -sS https://bootstrap.pypa.io/get-pip.py | python3
-> pip install --upgrade pip
-> pip install -e ".[dev,apple-vision]"
-> ```
->
-> これで直らない場合は `brew reinstall python@3.11` を試してから、
-> 上のやり直し手順をもう一度実行してください。
->
-> **さらに `truststore` 関連のエラー
-> (`ValueError: invalid literal for int() with base 10: ''`、
-> `pip/_vendor/truststore/_macos.py` を含む)が出る場合**: pipが内部でmacOSの
-> バージョンを調べる際に失敗しています。まず原因を確認します。
->
-> ```bash
-> python3 -c "import platform; print(repr(platform.mac_ver()))"
-> ```
->
-> `('', ('', '', ''), '')` のように空で返ってきたら、`SYSTEM_VERSION_COMPAT`
-> という環境変数のせいでmacOSのバージョンが正しく取得できていません。
-> 一時的に外してから、pipの入れ直しをやり直します。
->
-> ```bash
-> unset SYSTEM_VERSION_COMPAT
-> rm -rf .venv
-> python3.11 -m venv --without-pip .venv
-> source .venv/bin/activate
-> curl -sS https://bootstrap.pypa.io/get-pip.py | python3
-> pip install --upgrade pip
-> pip install -e ".[dev,apple-vision]"
-> ```
->
-> `unset` はこのターミナルの間だけ有効です。それでも空のままなら、
-> 新しいpipが自動で有効にする `truststore` を使わない、少し前のpipを
-> 明示的に入れて回避します。
->
-> ```bash
-> rm -rf .venv
-> python3.11 -m venv --without-pip .venv
-> source .venv/bin/activate
-> curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
-> python3 /tmp/get-pip.py "pip<24.3"
-> pip install -e ".[dev,apple-vision]"
-> ```
 
 最後の行の意味:
 
@@ -147,6 +98,9 @@ pip install -e ".[dev,apple-vision]"
 
 > 以降、**ターミナルを開き直すたびに** `cd ~/Oka/textbook-scan && source .venv/bin/activate`
 > が必要です。プロンプトの先頭に `(.venv)` が付いていれば有効になっています。
+> このvenvにパッケージを追加・更新するときは `pip install` ではなく
+> `uv pip install` を使ってください(`uv venv` で作ったvenvには pip 本体が
+> 入っていません)。`tscan` や `pytest` などのコマンド自体は今までどおり使えます。
 
 ---
 
@@ -174,7 +128,7 @@ OCRエンジン(§9.2)
 | 表示 | 対処 |
 |---|---|
 | `macOS 13以降が必要です` | Visionの日本語対応がmacOS 13からのため。OSを上げる |
-| `pip install "tscan[apple-vision]" が必要です` | 手順4の `apple-vision` を付け忘れ。もう一度実行 |
+| `pip install "tscan[apple-vision]" が必要です` | 手順4の `apple-vision` を付け忘れ。`uv pip install -e ".[dev,apple-vision]"` をもう一度実行 |
 
 ### エンジンが本当に読めるか確かめる
 
@@ -302,12 +256,12 @@ tscan evaluate physics_2026 --ground-truth ~/ground_truth.json
 
 | 症状 | 原因と対処 |
 |---|---|
-| `command not found: tscan` / `command not found: pip` | `source .venv/bin/activate` を忘れている。それでも直らなければ手順4の `ensurepip` の回避策を実行 |
-| `ensurepip ... returned non-zero exit status 1` | Homebrewのpython@3.11に同梱のensurepipが壊れている。手順4の回避策(`--without-pip` + `get-pip.py`)を実行 |
-| `truststore` / `platform.mac_ver()` 関連のエラー | pipがmacOSのバージョンを取得できていない。手順4の回避策(`SYSTEM_VERSION_COMPAT`を外す、または`pip<24.3`を明示指定)を実行 |
+| `command not found: tscan` | `source .venv/bin/activate` を忘れている |
+| `command not found: pip` | `uv venv` で作ったvenvにはpip本体が入っていません。`uv pip install ...` を使ってください |
+| `ensurepip ...` や `truststore` / `platform.mac_ver()` 関連のエラー | 標準の`pip`/`venv`がmacOS 26 (Tahoe)で動かない既知の問題。手順4の `uv` を使う方法で回避 |
 | `tesseractが見つかりません` | `brew install tesseract tesseract-lang` を実行 |
 | `apple_vision` が有効にならない | 手順5の表を参照 |
-| HEICが読めない | `pip install pillow-heif` を実行(通常は手順4で入ります) |
+| HEICが読めない | `uv pip install pillow-heif` を実行(通常は手順4で入ります) |
 | 見開きが1ページとして処理される | `tscan review` で確認し、分割できていなければ写真を送ってください。ノドの検出条件を調整します |
 | 処理が極端に遅い | 他の重い処理と競合していないか確認。目安は1ページ8秒前後(12MP、2並列) |
 
