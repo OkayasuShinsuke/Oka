@@ -186,29 +186,40 @@ def _count_line_bands(lines: np.ndarray, min_fraction: float = 0.15) -> int:
     return int(np.count_nonzero(rows[1:] & ~rows[:-1]) + (1 if rows.size and rows[0] else 0))
 
 
+def _osd_rotation(pytesseract_module, image_bgr: np.ndarray) -> int | None:
+    """Tesseract OSD を1回実行して回転角を返す。判定できなければ None。"""
+    try:
+        osd = pytesseract_module.image_to_osd(image_bgr, config="--psm 0")
+    except Exception:  # noqa: BLE001 — osd.traineddata が無い、文字が少なすぎる等
+        return None
+    for line in osd.splitlines():
+        if line.startswith("Rotate:"):
+            try:
+                return int(line.split(":")[1].strip()) % 360
+            except ValueError:
+                return None
+    return None
+
+
 def detect_rotation(image_bgr: np.ndarray) -> int:
     """写真を正立させるのに必要な時計回りの回転角(0/90/180/270)を返す。
 
     本を横向きに構えて撮ると(見開きを画面いっぱいに入れるための自然な持ち方)、
     写真の中で文字が縦に流れる。Tesseract の OSD(向きと文字体系の判定)を
-    半分の解像度で走らせて向きを決める。判定できなければ 0(回転しない)。
+    半分の解像度で走らせて向きを決める。半解像度では判定がぎりぎりで失敗することが
+    あるため、失敗した場合だけフル解像度でもう一度だけ試す。それでも判定できなければ
+    0(回転しない)。
     """
     try:
         import pytesseract
     except ImportError:
         return 0
     small = cv2.resize(image_bgr, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
-    try:
-        osd = pytesseract.image_to_osd(small, config="--psm 0")
-    except Exception:  # noqa: BLE001 — osd.traineddata が無い、文字が少なすぎる等
-        return 0
-    for line in osd.splitlines():
-        if line.startswith("Rotate:"):
-            try:
-                return int(line.split(":")[1].strip()) % 360
-            except ValueError:
-                return 0
-    return 0
+    rotation = _osd_rotation(pytesseract, small)
+    if rotation is not None:
+        return rotation
+    rotation = _osd_rotation(pytesseract, image_bgr)
+    return rotation if rotation is not None else 0
 
 
 _ROTATIONS = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}

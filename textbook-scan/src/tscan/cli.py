@@ -512,5 +512,82 @@ def config_set_output_dir(path: str = typer.Argument(...)) -> None:
     console.print(f"[green]✓[/green] 既定保存先を変更: {path} ({USER_CONFIG_PATH})")
 
 
+# ---------------------------------------------------------------------------
+# 実写真ベンチマーク(自動改善ループの採点係, docs/improve-loop.md)
+# ---------------------------------------------------------------------------
+
+
+def _default_bench_dir() -> Path:
+    import os
+
+    return Path(os.environ.get("TSCAN_BENCH_DIR", str(Path.home() / "tscan_bench"))).expanduser()
+
+
+@app.command()
+def bench(
+    manifest: Path = typer.Option(None, "--manifest", help="採点対象の manifest.json(既定: $TSCAN_BENCH_DIR/manifest.json)"),
+    split: str = typer.Option("train", "--split", help="train | holdout | all"),
+    out: Path = typer.Option(None, "--out", help="結果JSONの保存先(既定: <bench>/runs/<日時>_<split>.json)"),
+    baseline: Path = typer.Option(None, "--baseline", help="比較する基準の結果JSON"),
+    save_baseline: bool = typer.Option(False, "--save-baseline", help="今回の結果を <bench>/baseline_<split>.json に保存"),
+    gate: str = typer.Option(
+        None, "--gate", help="accept: 判定が accept 以外なら終了コード1 / no-worse: reject / incomparable のとき終了コード1"
+    ),
+    min_gain: float = typer.Option(0.5, "--min-gain", help="改善と認める最小幅(ポイント)"),
+    max_set_loss: float = typer.Option(1.0, "--max-set-loss", help="セットごとの許容悪化(ポイント)"),
+    offline: bool = typer.Option(False, "--offline", help="外部APIを使わない"),
+    workers: int | None = typer.Option(None, "--workers"),
+    keep_images: Path = typer.Option(None, "--keep-images", help="前処理後の画像をこのフォルダに残す(失敗分析用)"),
+) -> None:
+    """実写真で前処理+OCRを採点し、基準と比べて採否を判定する(自動改善ループ用)。"""
+    import json as _json
+
+    from tscan.bench import compare, load_manifest, run_bench
+
+    bench_dir = _default_bench_dir()
+    manifest = manifest or bench_dir / "manifest.json"
+    if not manifest.exists():
+        console.print(f"[red]manifest が見つかりません: {manifest}[/red](docs/improve-loop.md の準備手順を参照)")
+        raise typer.Exit(code=2)
+    bench_dir = manifest.parent
+    if gate and gate not in ("accept", "no-worse"):
+        console.print("[red]--gate は accept か no-worse を指定してください[/red]")
+        raise typer.Exit(code=2)
+    if gate and not baseline:
+        console.print("[red]--gate には --baseline が必要です[/red]")
+        raise typer.Exit(code=2)
+
+    result = run_bench(load_manifest(manifest), split=split, offline=offline, workers=workers, work_dir=keep_images)
+
+    out = out or bench_dir / "runs" / f"{datetime.now():%Y%m%d_%H%M%S}_{split}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    table = Table("セット", "写真", "誤り率", title=f"ベンチマーク({split}, エンジン: {', '.join(result['meta']['engines'])})")
+    for name, s in result["sets"].items():
+        table.add_row(name, str(s["photos"]), f"{s['cer']:.2f}%")
+    table.add_row("[bold]全体[/bold]", str(len(result["photos"])), f"[bold]{result['overall']['cer']:.2f}%[/bold]")
+    console.print(table)
+    worst = sorted(result["photos"], key=lambda p: -p["cer"])[:5]
+    console.print("悪い順: " + " / ".join(f"{Path(p['file']).name} {p['cer']:.1f}%" for p in worst))
+    console.print(f"結果: {out}({result['meta']['seconds']}秒)")
+
+    if save_baseline:
+        path = bench_dir / f"baseline_{split}.json"
+        path.write_text(_json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        console.print(f"[green]基準として保存しました: {path}[/green]")
+
+    if baseline:
+        verdict, lines = compare(
+            result, _json.loads(Path(baseline).read_text(encoding="utf-8")), min_gain=min_gain, max_set_loss=max_set_loss
+        )
+        for line in lines:
+            console.print(line)
+        # エージェントが機械的に読み取れるよう、最後に1行で判定を出す
+        print(f"VERDICT={verdict}")
+        if (gate == "accept" and verdict != "accept") or (gate == "no-worse" and verdict in ("reject", "incomparable")):
+            raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()
