@@ -333,11 +333,15 @@ def stretch_contrast(
       - 文字がすでに十分濃い画像には何もしない(apply_above で判定)
       - 薄い画像も、iPhoneで良く読めていた濃さ(約90〜100)までにとどめる
     という形にしている。合成画像のような真っ黒な文字にも影響しない。
+
+    通常の文字ページでは文字(ink)が紙面の3割を超えることはまずない。実写真(影・照明ムラあり)
+    ではOtsu二値化が汚染され、ink画素比率が37%まで膨張して文字の中央値が汚染された値になり、
+    引き伸ばしで文字が破壊されることを実測で確認したため、この場合は引き伸ばしをスキップする。
     """
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     ink = gray[binary == 0]
     paper = gray[binary > 0]
-    if ink.size < gray.size * 0.002 or paper.size == 0:
+    if ink.size < gray.size * 0.002 or paper.size == 0 or ink.size > gray.size * 0.3:
         return gray
     lo = float(np.median(ink))
     hi = float(np.median(paper))
