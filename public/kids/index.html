@@ -65,6 +65,7 @@
     font-size: 1.3rem; display: grid; place-items: center; padding: 0;
   }
   .round:active { transform: translateY(2px); }
+  .round.muted { filter: grayscale(1); opacity: .5; }
   .hud h1 {
     margin: 0; flex: 1; color: #fff; font-family: var(--display); font-weight: 400; font-size: 1.2rem; letter-spacing: .06em;
   }
@@ -313,8 +314,8 @@
   <section id="home">
     <div class="hud">
       <h1>あそんで まなぼう</h1>
-      <span class="pill coin">🪙 <b class="coinNum">0</b></span>
-      <button class="round" id="soundBtn" aria-label="おと オン/オフ">🔊</button>
+      <span class="pill coin">🐚 <b class="coinNum">0</b></span>
+      <button class="round" id="soundBtn" aria-label="おと オン/オフ">🐬</button>
     </div>
     <div class="stage tall" data-stage>
       <p class="logo">まなびっこ<small>メンちゃんと いっしょ</small></p>
@@ -324,12 +325,12 @@
       <button id="lvHard" aria-pressed="false">むずかしい 〜10</button>
     </div>
     <div class="menu">
-      <button class="key k1" data-game="count"><span><span class="e">🍎</span>かず<small>いくつ あるかな</small></span></button>
-      <button class="key k0" data-game="add"><span><span class="e">➕</span>たしざん<small>あわせて いくつ</small></span></button>
-      <button class="key k3" data-game="kana"><span><span class="e">🐶</span>ひらがな<small>さいしょの もじ</small></span></button>
-      <button class="key k2" data-game="more"><span><span class="e">⚖️</span>どっち？<small>おおいのは どっち</small></span></button>
-      <button class="key k0" data-game="color"><span><span class="e">🎨</span>いろ<small>なにいろ かな</small></span></button>
-      <button class="key k1" id="bookBtn"><span><span class="e">📒</span>シールちょう<small id="bookCount">0まい</small></span></button>
+      <button class="key k1" data-game="count"><span><span class="e">🐟</span>かず<small>いくつ あるかな</small></span></button>
+      <button class="key k0" data-game="add"><span><span class="e">🐙</span>たしざん<small>あわせて いくつ</small></span></button>
+      <button class="key k3" data-game="kana"><span><span class="e">🐬</span>ひらがな<small>さいしょの もじ</small></span></button>
+      <button class="key k2" data-game="more"><span><span class="e">🦀</span>どっち？<small>おおいのは どっち</small></span></button>
+      <button class="key k0" data-game="color"><span><span class="e">🐠</span>いろ<small>なにいろ かな</small></span></button>
+      <button class="key k1" id="bookBtn"><span><span class="e">🐋</span>シールちょう<small id="bookCount">0まい</small></span></button>
     </div>
     <p class="note">おうちの かたへ：もんだいは こえで よみあげます。iPhone は マナーモードを かいじょ して ください。<br>メンちゃんを タッチすると おはなし するよ。</p>
   </section>
@@ -337,11 +338,11 @@
   <!-- ===== ゲーム ===== -->
   <section id="game" hidden>
     <div class="hud">
-      <button class="round" id="backBtn" aria-label="ホームへ もどる">🏠</button>
+      <button class="round" id="backBtn" aria-label="ホームへ もどる">🐳</button>
       <span class="pill">せいかい <b id="okNum">0</b></span>
       <span class="pill miss">ミス <b id="ngNum">0</b></span>
-      <span class="pill coin">🪙 <b class="coinNum">0</b></span>
-      <button class="round" id="repeatBtn" aria-label="もういちど きく">🔈</button>
+      <span class="pill coin">🐚 <b class="coinNum">0</b></span>
+      <button class="round" id="repeatBtn" aria-label="もういちど きく">🐬</button>
     </div>
     <div class="stage" data-stage></div>
     <div class="marquee">
@@ -358,7 +359,7 @@
 
   <!-- ===== けっか ===== -->
   <section id="result" hidden>
-    <div class="hud"><h1>けっか はっぴょう</h1><span class="pill coin">🪙 <b class="coinNum">0</b></span></div>
+    <div class="hud"><h1>けっか はっぴょう</h1><span class="pill coin">🐚 <b class="coinNum">0</b></span></div>
     <div class="stage tall" data-stage></div>
     <div class="panel">
       <div class="stars" id="stars"></div>
@@ -376,9 +377,9 @@
   <!-- ===== シールちょう ===== -->
   <section id="book" hidden>
     <div class="hud">
-      <button class="round" id="bookBack" aria-label="ホームへ もどる">🏠</button>
+      <button class="round" id="bookBack" aria-label="ホームへ もどる">🐳</button>
       <h1>シールちょう</h1>
-      <span class="pill coin">🪙 <b class="coinNum">0</b></span>
+      <span class="pill coin">🐚 <b class="coinNum">0</b></span>
     </div>
     <div class="book" id="bookGrid"></div>
   </section>
@@ -546,11 +547,16 @@ function fxLoop() {
     c.translate(p.x, p.y);
     c.globalAlpha = Math.min(1, p.life / 25);
     c.lineWidth = 2; c.strokeStyle = "#2A2250";
-    if (p.type === "coin") {           // くるくる まわる コイン（よこはばを cos で かえる）
+    if (p.type === "coin") {           // くるくる まわる きんの かいがら（よこはばを cos で かえる）
       c.scale(Math.max(0.15, Math.abs(Math.cos(p.a))), 1);
-      c.beginPath(); c.arc(0, 0, p.r, 0, Math.PI * 2); c.fillStyle = "#FFCB2F"; c.fill();
-      c.strokeStyle = "#B7791F"; c.stroke();
-      c.beginPath(); c.arc(0, 0, p.r * 0.6, 0, Math.PI * 2); c.strokeStyle = "#FFE99A"; c.stroke();
+      c.beginPath();                    // おうぎがた（ホタテがい）
+      c.moveTo(0, p.r * 0.7);
+      c.arc(0, p.r * 0.2, p.r, Math.PI * 1.15, Math.PI * 1.85);
+      c.closePath();
+      c.fillStyle = "#FFCB2F"; c.fill(); c.strokeStyle = "#B7791F"; c.stroke();
+      c.beginPath();                    // かいがらの すじ
+      for (let k = -2; k <= 2; k++) { c.moveTo(0, p.r * 0.7); c.lineTo(k * p.r * 0.28, -p.r * 0.7); }
+      c.strokeStyle = "#E0A21B"; c.lineWidth = 1.2; c.stroke();
     } else if (p.type === "star") {
       c.rotate(p.a); drawStar(c, p.r); c.fillStyle = p.color; c.fill(); c.stroke();
     } else if (p.type === "heart") {
@@ -612,21 +618,17 @@ const sfx = {
 // ============================================================
 //  もんだいの データ
 // ============================================================
-const THINGS = [["🍎", "りんご"], ["🐟", "さかな"], ["🚗", "くるま"], ["⭐", "ほし"], ["🐤", "ひよこ"],
-  ["🍓", "いちご"], ["🎈", "ふうせん"], ["🍩", "どーなつ"], ["🐞", "てんとうむし"], ["🐙", "たこ"]];
+const THINGS = [["🐟", "さかな"], ["🐙", "たこ"], ["🦀", "かに"], ["🐳", "くじら"], ["🐬", "いるか"],
+  ["🐠", "ねったいぎょ"], ["🐡", "ふぐ"], ["🦐", "えび"], ["🐢", "かめ"], ["🦑", "いか"]];
 const WORDS = [
-  ["あ", "あり", "🐜"], ["い", "いぬ", "🐶"], ["う", "うさぎ", "🐰"], ["え", "えんぴつ", "✏️"], ["お", "おにぎり", "🍙"],
-  ["か", "かに", "🦀"], ["き", "きりん", "🦒"], ["く", "くるま", "🚗"], ["け", "けーき", "🍰"], ["こ", "こあら", "🐨"],
-  ["さ", "さかな", "🐟"], ["し", "しか", "🦌"], ["す", "すいか", "🍉"], ["た", "たこ", "🐙"], ["つ", "つき", "🌙"],
-  ["て", "てれび", "📺"], ["と", "とまと", "🍅"], ["な", "なす", "🍆"], ["ね", "ねこ", "🐱"], ["は", "はな", "🌸"],
-  ["ひ", "ひよこ", "🐤"], ["ふ", "ふね", "🚢"], ["へ", "へび", "🐍"], ["ほ", "ほし", "⭐"], ["み", "みかん", "🍊"],
-  ["め", "めがね", "👓"], ["も", "もも", "🍑"], ["や", "やま", "⛰️"], ["ゆ", "ゆきだるま", "⛄"], ["ら", "らいおん", "🦁"],
-  ["り", "りんご", "🍎"], ["れ", "れもん", "🍋"], ["ろ", "ろけっと", "🚀"], ["わ", "わに", "🐊"],
+  ["あ", "あざらし", "🦭"], ["い", "いるか", "🐬"], ["う", "うみがめ", "🐢"], ["え", "えび", "🦐"],
+  ["か", "かに", "🦀"], ["く", "くじら", "🐳"], ["さ", "さめ", "🦈"], ["た", "たこ", "🐙"],
+  ["ね", "ねったいぎょ", "🐠"], ["ふ", "ふぐ", "🐡"], ["ぺ", "ぺんぎん", "🐧"], ["ら", "らっこ", "🦦"],
 ];
 const COLORS = [["あか", "#E53935"], ["あお", "#1E6FE0"], ["きいろ", "#FFD21F"], ["みどり", "#2E9E4F"],
   ["ぴんく", "#FF8CC6"], ["むらさき", "#8E44AD"], ["おれんじ", "#FF8C1A"], ["ちゃいろ", "#8B5A2B"]];
-const STICKERS = ["🦄", "🐳", "🦖", "🌈", "🍓", "🚒", "🎈", "🐼", "🦋", "🍩", "🚂", "🌻",
-  "🐧", "🍉", "⚽", "🎀", "🐙", "🚁", "🧸", "🌟"];
+const STICKERS = ["🐳", "🐋", "🐬", "🦭", "🐟", "🐠", "🐡", "🦈", "🐙", "🦑",
+  "🦐", "🦞", "🦀", "🐚", "🪸", "🪼", "🐢", "🐧", "🦦", "🦪"];
 const NAMES = { count: "かず", add: "たしざん", kana: "ひらがな", more: "どっち？", color: "いろ" };
 const maxNum = () => (state.level === "easy" ? 5 : 10);
 
@@ -662,14 +664,14 @@ const GAMES = {
     while (a === b || (state.level === "easy" && Math.abs(a - b) < 2)) { a = rand(1, max); b = rand(1, max); }
     const [emoji] = pick(THINGS);
     return { kind: "choice", cls: "group-key", cols: 2, prompt: "おおいのは どっち？", say: "おおいのは どっちかな？",
-      stage: `<div class="word"><span class="big">⚖️</span></div>`,
+      stage: `<div class="word"><span class="big">🦀</span></div>`,
       choices: [a, b].map((n) => ({ html: emoji.repeat(n), ok: n === Math.max(a, b), label: `${n}こ` })),
       praise: `${Math.max(a, b)}こ の ほうが おおいね！` };
   },
   color() {
     const set = shuffle(COLORS).slice(0, state.level === "easy" ? 3 : 4), [name] = pick(set);
     return { kind: "choice", cls: "color", cols: set.length === 4 ? 2 : 3, prompt: `「${name}」は どれ？`, say: `${name}は どれかな？`,
-      stage: `<div class="word"><span class="big">🎨</span></div>`,
+      stage: `<div class="word"><span class="big">🐠</span></div>`,
       choices: set.map(([n, hex]) => ({ html: "", color: hex, ok: n === name, label: n })), praise: `${name}！ せいかい！` };
   },
 };
@@ -684,7 +686,7 @@ function show(id) {
 function renderHud() {
   document.querySelectorAll(".coinNum").forEach((el) => (el.textContent = state.coins));
   $("bookCount").textContent = `${state.stickers.length}まい`;
-  $("soundBtn").textContent = state.sound ? "🔊" : "🔇";
+  $("soundBtn").classList.toggle("muted", !state.sound);
   $("lvEasy").setAttribute("aria-pressed", state.level === "easy");
   $("lvHard").setAttribute("aria-pressed", state.level === "hard");
   if (game) { $("okNum").textContent = game.ok; $("ngNum").textContent = game.ng; }
@@ -816,7 +818,7 @@ function finish() {
   $("stars").innerHTML = Array.from({ length: ROUND }, (_, i) =>
     `<span class="${i < game.stars ? "" : "off"}" style="animation-delay:${0.3 + i * 0.15}s">★</span>`).join("");
   $("prize").textContent = sticker;
-  $("earnText").innerHTML = `シール ゲット！<br>🪙 +${game.earned}`;
+  $("earnText").innerHTML = `シール ゲット！<br>🐚 +${game.earned}`;
   show("result");
   renderHud();
   stage.classList.toggle("fever", perfect);
