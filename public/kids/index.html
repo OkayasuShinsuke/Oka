@@ -452,6 +452,7 @@
       <h1>あそんで まなぼう</h1>
       <span class="pill coin">🐚 <b class="coinNum">0</b></span>
       <button class="round" id="soundBtn" aria-label="おと オン/オフ">🐬</button>
+      <button class="round" id="transferBtn" aria-label="ひきつぎコード">🐢</button>
     </div>
     <div class="stage tall" data-stage>
       <p class="logo">まなびっこ<small>メンちゃんと いっしょ</small></p>
@@ -553,6 +554,41 @@
     <div class="stage tall" data-stage></div>
     <div class="love" id="feedLove"></div>
     <div class="foods" id="foodGrid"></div>
+  </section>
+
+  <!-- ===== ひきつぎコード ===== -->
+  <section id="transfer" hidden>
+    <div class="hud">
+      <button class="round" id="transferBack" aria-label="ホームへ もどる">🐳</button>
+      <h1>ひきつぎコード</h1>
+      <span class="pill coin">🐚 <b class="coinNum">0</b></span>
+    </div>
+    <div class="stage tall" data-stage>
+      <p class="logo" style="font-size:1rem">べつの たんまつに データを ひきつぐ ばんごうだよ</p>
+    </div>
+    <div class="panel">
+      <p class="note">きみの ひきつぎばんごう</p>
+      <p id="transferCodeDisplay" style="font-size:2.6rem;letter-spacing:.15em;text-align:center;font-weight:800;margin:4px 0;">----</p>
+      <div class="row">
+        <button class="key k1" id="issueBtn">はっこうする</button>
+        <button class="key k2" id="syncBtn" hidden>どうきする</button>
+      </div>
+      <p class="note" id="transferMsg"></p>
+      <hr style="border:none;border-top:2px dashed var(--ink);opacity:.3;margin:12px 0;">
+      <p class="note">べつの たんまつの ばんごうを いれると、そのデータに ふくげんできるよ</p>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="transferInput" placeholder="123456"
+        style="font-size:1.4rem;text-align:center;width:100%;padding:10px;border-radius:12px;border:2px solid var(--ink);box-sizing:border-box;">
+      <div class="row">
+        <button class="key k3" id="restoreBtn">ふくげんする</button>
+      </div>
+      <div id="restoreConfirmBox" hidden>
+        <p class="note">ほんとうに いいですか？ いまの データは きえて、べつの データに かわるよ。</p>
+        <div class="row">
+          <button class="key k1" id="restoreYesBtn">はい、ふくげんする</button>
+          <button class="key k2" id="restoreNoBtn">やめる</button>
+        </div>
+      </div>
+    </div>
   </section>
 </div>
 <canvas id="fx"></canvas>
@@ -1040,7 +1076,7 @@ const GAMES = {
 //  がめんの きりかえ と HUD
 // ============================================================
 function show(id) {
-  ["home", "game", "result", "book", "shop", "feed"].forEach((s) => ($(s).hidden = s !== id));
+  ["home", "game", "result", "book", "shop", "feed", "transfer"].forEach((s) => ($(s).hidden = s !== id));
   if (id === "home") updateHungryBubble();
   if (id === "shop") renderShop();
   if (id === "feed") renderFoods();
@@ -1440,6 +1476,106 @@ $("feedBtn").addEventListener("click", () => { sfx.tap(); show("feed"); });
 $("shopBtn").addEventListener("click", () => { sfx.tap(); show("shop"); });
 $("feedBack").addEventListener("click", () => show("home"));
 $("shopBack").addEventListener("click", () => show("home"));
+
+// ---------- ひきつぎコード（複数端末セーブ転送） ----------
+// 注意: claude.ai の Artifact プレビューからは本物のサーバーに繋がらないため、
+// fetch はすべて try/catch し、失敗しても画面が止まらないようにする。
+function collectSaveData() {
+  return {
+    coins: state.coins,
+    stickers: state.stickers,
+    owned: state.owned,
+    equip: state.equip,
+    love: state.love,
+    lastFed: state.lastFed,
+    level: state.level,
+    sound: state.sound,
+  };
+}
+function applySaveData(data) {
+  if (!data || typeof data !== "object") return;
+  if (typeof data.coins === "number") state.coins = data.coins;
+  if (Array.isArray(data.stickers)) state.stickers = data.stickers;
+  if (Array.isArray(data.owned)) state.owned = data.owned;
+  if (data.equip && typeof data.equip === "object") state.equip = data.equip;
+  if (typeof data.love === "number") state.love = data.love;
+  if (typeof data.lastFed === "number") state.lastFed = data.lastFed;
+  if (typeof data.level === "string") state.level = data.level;
+  if (typeof data.sound === "boolean") state.sound = data.sound;
+  store.set("mk.coins", state.coins);
+  store.set("mk.stickers", state.stickers);
+  store.set("mk.owned", state.owned);
+  store.set("mk.equip", state.equip);
+  store.set("mk.love", state.love);
+  store.set("mk.fed", state.lastFed);
+  store.set("mk.level", state.level);
+  store.set("mk.sound", state.sound);
+}
+function setTransferMsg(msg) { $("transferMsg").textContent = msg || ""; }
+function renderTransfer() {
+  const code = store.get("mk.transferCode", null);
+  $("transferCodeDisplay").textContent = code || "----";
+  $("issueBtn").hidden = !!code;
+  $("syncBtn").hidden = !code;
+  $("restoreConfirmBox").hidden = true;
+}
+async function issueOrSyncCode() {
+  const existingCode = store.get("mk.transferCode", null);
+  setTransferMsg("そうしんちゅう…");
+  try {
+    const res = await fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: existingCode || undefined, data: collectSaveData() }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setTransferMsg(err.error || "サーバーに つながりませんでした。npm start で うごかしているときだけ つかえます。");
+      return;
+    }
+    const json = await res.json();
+    store.set("mk.transferCode", json.code);
+    renderTransfer();
+    setTransferMsg(existingCode ? "どうき できたよ！" : "はっこう できたよ！");
+    speak("ひきつぎばんごうが できたよ", "praise");
+  } catch (e) {
+    setTransferMsg("サーバーに つながりませんでした。npm start で うごかしているときだけ つかえます。");
+  }
+}
+$("issueBtn").addEventListener("click", () => { sfx.tap(); issueOrSyncCode(); });
+$("syncBtn").addEventListener("click", () => { sfx.tap(); issueOrSyncCode(); });
+$("restoreBtn").addEventListener("click", () => {
+  sfx.tap();
+  const v = $("transferInput").value.trim();
+  if (!/^\d{6}$/.test(v)) { setTransferMsg("6けたの すうじを いれてね。"); return; }
+  $("restoreConfirmBox").hidden = false;
+});
+$("restoreNoBtn").addEventListener("click", () => { sfx.tap(); $("restoreConfirmBox").hidden = true; });
+$("restoreYesBtn").addEventListener("click", async () => {
+  sfx.tap();
+  const v = $("transferInput").value.trim();
+  $("restoreConfirmBox").hidden = true;
+  setTransferMsg("ふくげんちゅう…");
+  try {
+    const res = await fetch("/api/save/" + v);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setTransferMsg(err.error || "その ばんごうは みつかりませんでした。");
+      return;
+    }
+    const json = await res.json();
+    applySaveData(json.data);
+    store.set("mk.transferCode", v);
+    renderHud();
+    renderTransfer();
+    setTransferMsg("ふくげん できたよ！");
+    speak("データを ふくげんしたよ", "praise");
+  } catch (e) {
+    setTransferMsg("サーバーに つながりませんでした。npm start で うごかしているときだけ つかえます。");
+  }
+});
+$("transferBtn").addEventListener("click", () => { sfx.tap(); setTransferMsg(""); renderTransfer(); show("transfer"); });
+$("transferBack").addEventListener("click", () => show("home"));
 $("shopTabs").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { sfx.tap(); shopSlot = b.dataset.slot; renderShop(); }));
 applyOutfit();
 renderHud();
