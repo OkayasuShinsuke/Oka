@@ -900,13 +900,38 @@ function tone(freq, start, dur, type = "sine", vol = 0.18) {
     o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur);
   } catch {}
 }
+// パチンコの「揃う直前」演出っぽい ライザー：短い ブリップが 低音から 高音へ 駆け上がる
+function chord(root, start, dur = 0.35, type = "sine", vol = 0.15, intervals = [0, 4, 7]) {
+  intervals.forEach((iv) => tone(root * Math.pow(2, iv / 12), start, dur, type, vol));
+}
 const sfx = {
   tap() { tone(660, 0, 0.06, "square", 0.05); },
   ok() { tone(784, 0, 0.12); tone(988, 0.09, 0.12); tone(1319, 0.18, 0.3); },
   coin() { for (let i = 0; i < 4; i++) { tone(1568, 0.25 + i * 0.09, 0.07, "square", 0.05); tone(2093, 0.29 + i * 0.09, 0.12, "square", 0.05); } },
   ng() { tone(260, 0, 0.18, "triangle", 0.25); tone(200, 0.15, 0.25, "triangle", 0.25); },
   fever() { [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.07, 0.12, "square", 0.07)); },
-  fanfare() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.14, 0.32)); },
+  // せいかい判定の 直前に かかる ドラムロールふう ライザー（約350ms）
+  riser() {
+    const n = 14;
+    for (let i = 0; i < n; i++) tone(300 + i * (650 / n), i * 0.025, 0.022, "square", 0.055);
+  },
+  // 2れんぞく めの ちいさな きらめき ピング（フィーバーの ひとつ手前）
+  comboPing() { tone(1568, 0, 0.07, "sine", 0.11); tone(2093, 0.05, 0.1, "sine", 0.09); },
+  // ラウンドクリア：コードを かさねた ジャックポットふう チャイム
+  fanfare() {
+    chord(523, 0); chord(659, 0.28); chord(784, 0.56); chord(1047, 0.84, 0.6);
+  },
+  // パーフェクトクリア：もっと ぶあつい ジャックポット チャイム（約1.8秒）
+  perfect() {
+    chord(523, 0, 0.4); chord(659, 0.3, 0.4); chord(784, 0.6, 0.4);
+    chord(1047, 0.9, 0.7, "sine", 0.14, [0, 4, 7, 12]);
+    chord(1319, 1.3, 0.6, "square", 0.07, [0, 7, 12]);
+  },
+  // レベルアップ専用の、明るい 上昇コード ジングル（ラウンドクリアとは 違う音）
+  levelup() {
+    chord(659, 0, 0.22, "triangle", 0.13); chord(880, 0.18, 0.22, "triangle", 0.13);
+    chord(1175, 0.36, 0.4, "square", 0.1);
+  },
 };
 
 // ============================================================
@@ -1026,7 +1051,7 @@ function addLove(n, stageEl) {
       mood(stage, "happy", true);
     }
     confetti(40);
-    sfx.fanfare();
+    sfx.levelup();
     speak("なかよし レベルが あがったよ！ プレゼント！");
     const sticker = pick(STICKERS);
     state.stickers.push(sticker); store.set("mk.stickers", state.stickers);
@@ -1133,10 +1158,11 @@ function judge(ok, btn) {
     const [x, y] = centerOf($("card"));
     burst(x, y, fever ? 36 : 20);
     floatText(x, y - 20, `+${gain}`);
-    sfx.ok(); sfx.coin();
+    sfx.riser(); sfx.ok(); sfx.coin();
     bumpCoins();
     mood(stage, "happy", true);
     if (game.combo === 3) { stage.classList.add("fever"); sfx.fever(); }
+    else if (game.combo === 2) { sfx.comboPing(); }
     banner(stage, fever ? "フィーバー！" : game.combo === 2 ? "2れんぞく！" : pick(["せいかい！", "すごい！", "やったね！"]), fever);
     speak(game.combo === 3 ? "フィーバー！ " + game.q.praise : game.q.praise);
     renderHud();
@@ -1168,7 +1194,7 @@ function finish() {
   stage.classList.toggle("fever", perfect);
   setTimeout(() => { banner(stage, perfect ? "パーフェクト！" : "クリア！", perfect); mood(stage, "happy", true); }, 100);
   confetti(perfect ? 90 : 50);
-  sfx.fanfare();
+  perfect ? sfx.perfect() : sfx.fanfare();
   speak(perfect ? "パーフェクト！ すごーい！ シールを どうぞ！" : "よく がんばったね！ シールを どうぞ！");
 }
 
