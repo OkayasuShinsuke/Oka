@@ -303,12 +303,148 @@
   @keyframes shake { 25% { transform: translateX(-9px); } 75% { transform: translateX(9px); } }
   @keyframes spin-in { from { transform: scale(.2) rotate(-240deg); } }
   @keyframes floatup { from { opacity: 1; } to { opacity: 0; transform: translate(-50%, -160%) scale(1.3); } }
+  /* ===== うみ の 背景（ページ全体・つねに うごく） ===== */
+  .sea { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+  .sea .sbub {
+    position: absolute; bottom: -6vh; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.22); background: rgba(255,255,255,.07);
+    animation: searise linear infinite;
+  }
+  .sea .beam {
+    position: absolute; top: -20%; width: 22%; height: 140%;
+    background: linear-gradient(180deg, rgba(255,255,255,.12), transparent 70%);
+    animation: beamsway 11s ease-in-out infinite;
+  }
+  @keyframes searise {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    12% { opacity: .8; } 100% { transform: translateY(-112vh) translateX(18px); opacity: 0; }
+  }
+  @keyframes beamsway {
+    0%, 100% { opacity: .22; transform: translateX(0) rotate(8deg); }
+    50% { opacity: .45; transform: translateX(26px) rotate(15deg); }
+  }
+
+  /* ===== ステージ内の さかな・スポットライト・電飾わく ===== */
+  .swim { position: absolute; z-index: 1; font-size: 1.35rem; animation-timing-function: linear; animation-iteration-count: infinite; filter: drop-shadow(0 2px 1px rgba(0,0,0,.25)); }
+  @keyframes swimL { from { transform: translateX(-15%); } to { transform: translateX(215%); } }
+  @keyframes swimR { from { transform: translateX(215%) scaleX(-1); } to { transform: translateX(-15%) scaleX(-1); } }
+  .spot {
+    position: absolute; bottom: -25%; width: 75%; height: 95%; z-index: 1; pointer-events: none; opacity: .45;
+    background: conic-gradient(from 0deg, rgba(255,255,255,.4), transparent 22%);
+  }
+  .spot.b { left: -12%; transform-origin: bottom left; animation: spotsweep 6s ease-in-out infinite; }
+  .spot.c { right: -12%; transform-origin: bottom right; animation: spotsweep 6s ease-in-out infinite reverse; }
+  @keyframes spotsweep { 0%, 100% { transform: rotate(-24deg); } 50% { transform: rotate(24deg); } }
+  .stage::after {
+    content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; border-radius: 26px;
+    padding: 3px; box-sizing: border-box;
+    background: repeating-linear-gradient(90deg, #FFE66D 0 7px, #3B2F6E 7px 14px);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: lights .7s steps(2) infinite;
+  }
+
+  /* ===== メンちゃんの きせかえ（アクセサリー） ===== */
+  .acc { pointer-events: none; }
+  .acc text { text-anchor: middle; }
+
+  /* ===== ヒーローの アイドルモーション ===== */
+  .tako.hero.spin .bob { animation: bob 2.6s ease-in-out infinite, spinhop 1.2s ease-in-out; }
+  @keyframes spinhop { 0% { transform: translateY(0) rotate(0); } 45% { transform: translateY(-14px) rotate(190deg); } 100% { transform: translateY(0) rotate(360deg); } }
+  .tako.hero.wave .bob { animation: bob 2.6s ease-in-out infinite, wavetilt 1.2s ease-in-out; }
+  @keyframes wavetilt { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-11deg); } 50% { transform: rotate(0); } 75% { transform: rotate(11deg); } }
+  .tako.hero.peek .bob { animation: bob 2.6s ease-in-out infinite, peeklean 1.2s ease-in-out; }
+  @keyframes peeklean { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.08) rotate(-4deg) translateX(-3px); } }
+
+  /* ===== ロゴの きらきら ===== */
+  .logo { animation: wobble 3s ease-in-out infinite, shimmer 4s linear infinite; }
+  @keyframes shimmer { 0%, 100% { color: var(--gold); } 33% { color: #FF8FA3; } 66% { color: #8FE3FF; } }
+
+  /* ===== キーの ひかり すじ・ゆらゆら ===== */
+  .menu .key, .pad .key { position: relative; overflow: hidden; }
+  .menu .key::after, .pad .key::after {
+    content: ""; position: absolute; top: -60%; left: -160%; width: 26%; height: 220%;
+    background: linear-gradient(75deg, transparent, rgba(255,255,255,.8), transparent);
+    animation: keyshine 3s ease-in-out infinite; pointer-events: none;
+  }
+  @keyframes keyshine { 0%, 55% { transform: translateX(0); } 100% { transform: translateX(580%); } }
+  .menu .key { animation: keywobble 4s ease-in-out infinite; }
+  @keyframes keywobble { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-1.4deg); } }
+  .menu .key:nth-child(1) { animation-delay: 0s; } .menu .key:nth-child(1)::after { animation-delay: .2s; }
+  .menu .key:nth-child(2) { animation-delay: -.6s; } .menu .key:nth-child(2)::after { animation-delay: 1.1s; }
+  .menu .key:nth-child(3) { animation-delay: -1.2s; } .menu .key:nth-child(3)::after { animation-delay: 2s; }
+  .menu .key:nth-child(4) { animation-delay: -1.8s; } .menu .key:nth-child(4)::after { animation-delay: .6s; }
+  .menu .key:nth-child(5) { animation-delay: -2.4s; } .menu .key:nth-child(5)::after { animation-delay: 1.6s; }
+  .menu .key:nth-child(6) { animation-delay: -3s; } .menu .key:nth-child(6)::after { animation-delay: 2.4s; }
+  .pad .key:nth-child(odd)::after { animation-delay: .5s; }
+  .pad .key:nth-child(even)::after { animation-delay: 1.9s; }
+
+  /* もんだいの ぽっぷいん */
+  .prompt.pop { animation: promptpop .45s cubic-bezier(.2, 1.4, .4, 1); }
+  @keyframes promptpop { 0% { transform: scale(.4); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+  /* ===== なかよし パネル ===== */
+  .love { background: var(--paper); border: 3px solid var(--ink); border-radius: 18px; padding: 8px 12px; display: flex; flex-direction: column; gap: 5px; }
+  .love .lvrow { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
+  .love .lvrow b { font-family: var(--display); font-weight: 400; color: var(--hot); }
+  .love .bar { position: relative; height: 14px; border-radius: 999px; background: #F1E9FF; border: 2px solid var(--ink); overflow: hidden; }
+  .love .bar i { position: absolute; inset: 0; width: 0%; background: linear-gradient(90deg, #FF5C8A, #FFD34D); border-radius: 999px; transition: width .5s; overflow: hidden; }
+  .love .bar i::after {
+    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,.7), transparent);
+    animation: barshine 2.2s linear infinite;
+  }
+  @keyframes barshine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .love .hearts { font-size: .9rem; letter-spacing: 2px; color: var(--hot); }
+
+  /* ===== おなかすいた ふきだし ===== */
+  .hungry { position: absolute; z-index: 5; top: 8px; right: 8%; background: #fff; border: 3px solid var(--ink); border-radius: 16px; padding: 4px 10px; font-size: .7rem; animation: bobble 2.4s ease-in-out infinite; }
+  .hungry::after { content: ""; position: absolute; bottom: -9px; left: 18px; border: 6px solid transparent; border-top-color: #fff; }
+  @keyframes bobble { 50% { transform: translateY(-4px); } }
+
+  /* ===== きせかえ ショップ ===== */
+  .tabs { display: flex; gap: 8px; }
+  .tabs button {
+    flex: 1; border: 3px solid var(--ink); border-radius: 14px; background: var(--paper);
+    padding: 8px 4px; font-family: var(--body); font-weight: 800; font-size: .82rem; box-shadow: 0 4px 0 #120D2B;
+  }
+  .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--gold); }
+  .shopgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .item {
+    position: relative; border: 3px solid var(--ink); border-radius: 16px; background: var(--paper);
+    padding: 8px 4px 7px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    box-shadow: 0 4px 0 rgba(0,0,0,.3);
+  }
+  .item .e { font-size: 1.9rem; line-height: 1; }
+  .item .swatch { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--ink); }
+  .item .nm { font-size: .68rem; text-align: center; line-height: 1.15; }
+  .item .price { font-size: .7rem; background: var(--lemon); border-radius: 999px; padding: 2px 8px; border: 2px solid var(--ink); }
+  .item.owned .price { background: var(--mint); }
+  .item.equip { outline: 4px solid var(--gold); outline-offset: 1px; }
+  .item.equip .price { background: var(--gold); }
+  .item.locked { opacity: .55; }
+  .item.locked .price { font-size: .62rem; }
+  .item.shake { animation: shake .4s; }
+
+  /* ===== ごはん ===== */
+  .foods { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .food-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 2px; border: 3px solid var(--ink);
+    border-radius: 16px; background: var(--paper); padding: 8px 2px; box-shadow: 0 4px 0 rgba(0,0,0,.3);
+  }
+  .food-btn .e { font-size: 1.8rem; }
+  .food-btn .price { font-size: .64rem; background: var(--lemon); border-radius: 999px; padding: 1px 6px; border: 2px solid var(--ink); }
+  .food-btn.shake { animation: shake .4s; }
+  .food-btn.ng { opacity: .5; pointer-events: none; }
+  .flying-food { position: fixed; z-index: 70; font-size: 1.8rem; pointer-events: none; transition: left .7s cubic-bezier(.3,.6,.3,1), top .7s cubic-bezier(.3,.6,.3,1), transform .7s, opacity .7s; }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
   }
   @media (max-width: 370px) { .key { min-height: 52px; font-size: 1.6rem; } .slots span { width: 52px; height: 60px; font-size: 2.2rem; } }
 </style>
 
+<div class="sea" id="sea" aria-hidden="true"></div>
 <div class="app">
   <!-- ===== ホーム ===== -->
   <section id="home">
@@ -319,6 +455,11 @@
     </div>
     <div class="stage tall" data-stage>
       <p class="logo">まなびっこ<small>メンちゃんと いっしょ</small></p>
+    </div>
+    <div class="love" id="homeLove"></div>
+    <div class="row">
+      <button class="key k2" id="feedBtn"><span><span class="e">🦐</span>ごはん</span></button>
+      <button class="key k3" id="shopBtn"><span><span class="e">🐧</span>きせかえ</span></button>
     </div>
     <div class="level" role="group" aria-label="むずかしさ">
       <button id="lvEasy" aria-pressed="true">やさしい 〜5</button>
@@ -383,6 +524,36 @@
     </div>
     <div class="book" id="bookGrid"></div>
   </section>
+
+  <!-- ===== きせかえ ===== -->
+  <section id="shop" hidden>
+    <div class="hud">
+      <button class="round" id="shopBack" aria-label="ホームへ もどる">🐳</button>
+      <h1>きせかえ</h1>
+      <span class="pill coin">🐚 <b class="coinNum">0</b></span>
+      <span class="pill" id="shopStickerPill">🐋 <b>0</b>まい</span>
+    </div>
+    <div class="stage" data-stage></div>
+    <div class="tabs" id="shopTabs" role="group" aria-label="ぶい">
+      <button data-slot="head" aria-pressed="true">あたま</button>
+      <button data-slot="face" aria-pressed="false">かお</button>
+      <button data-slot="hold" aria-pressed="false">もちもの</button>
+      <button data-slot="color" aria-pressed="false">いろ</button>
+    </div>
+    <div class="shopgrid" id="shopGrid"></div>
+  </section>
+
+  <!-- ===== ごはん ===== -->
+  <section id="feed" hidden>
+    <div class="hud">
+      <button class="round" id="feedBack" aria-label="ホームへ もどる">🐳</button>
+      <h1>ごはん</h1>
+      <span class="pill coin">🐚 <b class="coinNum">0</b></span>
+    </div>
+    <div class="stage tall" data-stage></div>
+    <div class="love" id="feedLove"></div>
+    <div class="foods" id="foodGrid"></div>
+  </section>
 </div>
 <canvas id="fx"></canvas>
 
@@ -412,7 +583,56 @@ const state = {
   sound: store.get("mk.sound", true),
   stickers: store.get("mk.stickers", []),
   coins: store.get("mk.coins", 0),
+  owned: store.get("mk.owned", ["pink"]),
+  equip: store.get("mk.equip", { head: null, face: null, hold: null, color: "pink" }),
+  love: store.get("mk.love", 0),
+  lastFed: store.get("mk.fed", 0),
 };
+let lastPet = 0;
+
+// ============================================================
+//  きせかえ アイテム・ごはん の データ
+// ============================================================
+const ITEMS = [
+  { id: "ribbon", slot: "head", emoji: "🎀", name: "りぼん", price: { shell: 5 } },
+  { id: "cap", slot: "head", emoji: "🧢", name: "ぼうし", price: { shell: 8 } },
+  { id: "straw", slot: "head", emoji: "👒", name: "むぎわら", price: { shell: 12 } },
+  { id: "silk", slot: "head", emoji: "🎩", name: "シルクハット", price: { sticker: 3 } },
+  { id: "flower", slot: "head", emoji: "🌸", name: "はなかざり", price: { sticker: 2 } },
+  { id: "grad", slot: "head", emoji: "🎓", name: "はかせぼうし", price: { shell: 20 }, love: 3 },
+  { id: "crown", slot: "head", emoji: "👑", name: "おうかん", price: { shell: 30 }, love: 5 },
+  { id: "glasses", slot: "face", emoji: "👓", name: "めがね", price: { shell: 6 } },
+  { id: "shades", slot: "face", emoji: "🕶️", name: "サングラス", price: { shell: 15 } },
+  { id: "goggles", slot: "face", emoji: "🥽", name: "ゴーグル", price: { sticker: 4 }, love: 2 },
+  { id: "balloon", slot: "hold", emoji: "🎈", name: "ふうせん", price: { shell: 5 } },
+  { id: "starwand", slot: "hold", emoji: "⭐", name: "ほしの つえ", price: { sticker: 3 } },
+  { id: "flag", slot: "hold", emoji: "🚩", name: "はた", price: { shell: 7 } },
+  { id: "trident", slot: "hold", emoji: "🔱", name: "ほこ", price: { shell: 25 }, love: 4 },
+  { id: "pink", slot: "color", color: "#FF8FA3", name: "ぴんく", price: { shell: 0 } },
+  { id: "mint", slot: "color", color: "#7FE0C0", name: "みんと", price: { shell: 10 } },
+  { id: "lavender", slot: "color", color: "#C3A6FF", name: "らべんだー", price: { shell: 10 } },
+  { id: "sky", slot: "color", color: "#8FD3FF", name: "すかいぶるー", price: { sticker: 3 } },
+  { id: "gold", slot: "color", color: "#FFD34D", name: "きんいろ", price: { shell: 40 }, love: 6 },
+];
+const FOODS = [
+  { id: "shrimp", emoji: "🦐", name: "えび", shell: 2, love: 2 },
+  { id: "onigiri", emoji: "🍙", name: "おにぎり", shell: 3, love: 3 },
+  { id: "straw", emoji: "🍓", name: "いちご", shell: 3, love: 3 },
+  { id: "donut", emoji: "🍩", name: "どーなつ", shell: 5, love: 5 },
+  { id: "cake", emoji: "🍰", name: "けーき", shell: 8, love: 9 },
+];
+const LOVE_STEPS = [0, 5, 15, 30, 50, 80, 120, 170, 230, 300];
+function loveLevel() {
+  let lv = 1;
+  for (let i = 1; i < LOVE_STEPS.length; i++) if (state.love >= LOVE_STEPS[i]) lv = i + 1;
+  return Math.min(lv, LOVE_STEPS.length);
+}
+function loveProgress() {
+  const lv = loveLevel();
+  if (lv >= LOVE_STEPS.length) return 1;
+  const lo = LOVE_STEPS[lv - 1], hi = LOVE_STEPS[lv];
+  return Math.max(0, Math.min(1, (state.love - lo) / (hi - lo)));
+}
 
 // ============================================================
 //  メンダコの え（SVG）。 色だけ かえて 3びき つくる
@@ -422,9 +642,9 @@ function tako(color, cls) {
   return `
   <svg class="tako ${cls}" viewBox="0 0 120 104" aria-hidden="true">
     <g class="bob">
-      <g class="ear l"><ellipse cx="30" cy="34" rx="13" ry="9" fill="${color}" ${s} transform="rotate(-35 30 34)"/></g>
-      <g class="ear r"><ellipse cx="90" cy="34" rx="13" ry="9" fill="${color}" ${s} transform="rotate(35 90 34)"/></g>
-      <path d="M16 78 C16 26 104 26 104 78 C104 88 95 92 89 86 C85 95 74 96 70 88 C66 97 54 97 50 88 C46 96 35 95 31 86 C25 92 16 88 16 78 Z" fill="${color}" ${s}/>
+      <g class="ear l"><ellipse class="skin" cx="30" cy="34" rx="13" ry="9" fill="${color}" ${s} transform="rotate(-35 30 34)"/></g>
+      <g class="ear r"><ellipse class="skin" cx="90" cy="34" rx="13" ry="9" fill="${color}" ${s} transform="rotate(35 90 34)"/></g>
+      <path class="skin" d="M16 78 C16 26 104 26 104 78 C104 88 95 92 89 86 C85 95 74 96 70 88 C66 97 54 97 50 88 C46 96 35 95 31 86 C25 92 16 88 16 78 Z" fill="${color}" ${s}/>
       <ellipse cx="44" cy="42" rx="9" ry="4.5" fill="#fff" opacity=".55" transform="rotate(-20 44 42)"/>
       <g class="eyes">
         <circle cx="46" cy="62" r="6.5" fill="#2A2250"/><circle cx="74" cy="62" r="6.5" fill="#2A2250"/>
@@ -437,8 +657,29 @@ function tako(color, cls) {
       <path class="mouth-open" d="M53 69 Q60 83 67 69 Z" fill="#C2185B" ${s} stroke-width="3"/>
       <path class="mouth-sad" d="M55 75 Q60 70 65 75" fill="none" ${s} stroke-width="3.5"/>
       <path class="sweat" d="M96 40 Q101 49 96 53 Q91 49 96 40 Z" fill="#8FD3FF" ${s} stroke-width="2.5"/>
+      <g class="acc">
+        <text class="acc-head" x="60" y="30" font-size="34" text-anchor="middle"></text>
+        <text class="acc-face" x="60" y="72" font-size="30" text-anchor="middle"></text>
+        <text class="acc-hold" x="112" y="92" font-size="26" text-anchor="middle"></text>
+      </g>
     </g>
   </svg>`;
+}
+
+// きせかえ の みため を メンダコ(hero) すべてに はんえい させる
+function applyOutfit() {
+  document.querySelectorAll(".tako.hero").forEach((t) => {
+    const headItem = ITEMS.find((i) => i.id === state.equip.head);
+    const faceItem = ITEMS.find((i) => i.id === state.equip.face);
+    const holdItem = ITEMS.find((i) => i.id === state.equip.hold);
+    const colorItem = ITEMS.find((i) => i.id === state.equip.color);
+    const h = t.querySelector(".acc-head"), f = t.querySelector(".acc-face"), o = t.querySelector(".acc-hold");
+    if (h) h.textContent = headItem ? headItem.emoji : "";
+    if (f) f.textContent = faceItem ? faceItem.emoji : "";
+    if (o) o.textContent = holdItem ? holdItem.emoji : "";
+    const fillColor = (colorItem && colorItem.color) || "#FF8FA3";
+    t.querySelectorAll(".skin").forEach((el) => el.setAttribute("fill", fillColor));
+  });
 }
 
 // ステージ（背景・旗・キラキラ・あわ・メンダコ3びき）を くみたてる
@@ -450,19 +691,49 @@ function buildStage(el) {
     .map(([x, y, s], i) => `<span class="twinkle" style="left:${x}%;top:${y}%;font-size:${s}rem;animation-delay:${i * -0.4}s">★</span>`).join("");
   const bubbles = [10, 26, 44, 63, 80, 92]
     .map((x, i) => `<span class="bubble" style="left:${x}%;animation-delay:${i * -1.2}s;transform:scale(${0.6 + (i % 3) * 0.3})"></span>`).join("");
+  const swimDur1 = 8 + Math.random() * 2, swimDur2 = 9 + Math.random() * 3;
   el.insertAdjacentHTML("afterbegin", `
     <div class="rays"></div><div class="glow"></div>
     <div class="bunting">${flags}</div>${stars}${bubbles}
+    <span class="spot b"></span><span class="spot c"></span>
+    <span class="swim" style="top:14%;animation:swimL ${swimDur1}s linear infinite;animation-delay:-${Math.random() * swimDur1}s">🐟</span>
+    <span class="swim" style="top:32%;animation:swimR ${swimDur2}s linear infinite;animation-delay:-${Math.random() * swimDur2}s">🐠</span>
     <div class="crew">${tako("#8FB8FF", "friend")}${tako("#FF8FA3", "hero")}${tako("#FFD34D", "friend")}</div>
     <div class="banner"></div>`);
   // 3びきの うごきを すこし ずらすと いきいき 見える
   el.querySelectorAll(".tako").forEach((t, i) => t.querySelectorAll(".bob, .ear").forEach((g) => (g.style.animationDelay = `${i * -0.7}s`)));
-  el.querySelector(".hero").addEventListener("click", () => {
+  el.querySelector(".hero").addEventListener("click", (ev) => {
     mood(el, "happy", true);
-    speak(pick(["こんにちは！ ぼく メンちゃん！", "いっしょに あそぼう！", "がんばってるね！"]));
+    const now = Date.now();
+    if (now - lastPet > 4000) {
+      lastPet = now;
+      addLove(1, el);
+      const [x, y] = [ev.clientX || centerOf(el)[0], ev.clientY || centerOf(el)[1]];
+      hearts(x, y, 6);
+    }
+    const lv = loveLevel();
+    let lines = ["こんにちは！ ぼく メンちゃん！", "いっしょに あそぼう！"];
+    if (lv >= 3) lines = lines.concat(["きみと あそぶの たのしい！", "また ごはん ちょうだいね！"]);
+    if (lv >= 6) lines = lines.concat(["きみは ぼくの しんゆう だよ！", "だいすき！"]);
+    speak(pick(lines));
   });
+  applyOutfit();
 }
 document.querySelectorAll("[data-stage]").forEach(buildStage);
+
+// ===== うみ の 背景（あわ・ひかりの すじ） =====
+function buildSea() {
+  const sea = $("sea");
+  if (!sea) return;
+  const bubs = Array.from({ length: 10 }, (_, i) => {
+    const left = Math.random() * 100, size = 6 + Math.random() * 14, dur = 14 + Math.random() * 12, delay = -Math.random() * dur;
+    return `<span class="sbub" style="left:${left}%;width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:${delay}s"></span>`;
+  }).join("");
+  const beams = [12, 46, 78].map((left, i) =>
+    `<span class="beam" style="left:${left}%;animation-delay:${i * -3.5}s"></span>`).join("");
+  sea.innerHTML = bubs + beams;
+}
+buildSea();
 
 // メンダコの きもちを かえる（happy / sad）
 function mood(stageEl, m, jump) {
@@ -507,6 +778,16 @@ function burst(x, y, n = 18) {
       x, y, vx: (Math.random() - 0.5) * 10, vy: -(5 + Math.random() * 8), g: 0.38,
       r: 8 + Math.random() * 6, a: Math.random() * 6, va: 0.2 + Math.random() * 0.2,
       life: 70 + Math.random() * 30, color: pick(FX_COLORS),
+    });
+  }
+}
+function hearts(x, y, n = 6) {
+  if (reduced) n = Math.ceil(n / 3);
+  for (let i = 0; i < n; i++) {
+    spawn({
+      type: "heart", x, y, vx: (Math.random() - 0.5) * 6, vy: -(3 + Math.random() * 5), g: 0.2,
+      r: 7 + Math.random() * 5, a: Math.random() * 6, va: 0.15 + Math.random() * 0.2,
+      life: 55 + Math.random() * 25, color: "#FF5C8A",
     });
   }
 }
@@ -561,6 +842,19 @@ function fxLoop() {
       c.rotate(p.a); drawStar(c, p.r); c.fillStyle = p.color; c.fill(); c.stroke();
     } else if (p.type === "heart") {
       c.rotate(Math.sin(p.a) * 0.4); drawHeart(c, p.r); c.fillStyle = "#FF5C8A"; c.fill(); c.stroke();
+    } else if (p.type === "spark") {
+      c.rotate(p.a); c.lineWidth = 0;
+      c.beginPath();
+      for (let k = 0; k < 4; k++) {
+        const ang = (Math.PI / 2) * k;
+        c.moveTo(0, 0);
+        c.quadraticCurveTo(Math.cos(ang + 0.3) * p.r * 0.3, Math.sin(ang + 0.3) * p.r * 0.3, Math.cos(ang) * p.r, Math.sin(ang) * p.r);
+        c.quadraticCurveTo(Math.cos(ang - 0.3) * p.r * 0.3, Math.sin(ang - 0.3) * p.r * 0.3, 0, 0);
+      }
+      c.closePath(); c.fillStyle = p.color; c.fill();
+    } else if (p.type === "bubble") {
+      c.beginPath(); c.arc(0, 0, p.r * 0.5, 0, Math.PI * 2);
+      c.strokeStyle = "rgba(255,255,255,.8)"; c.lineWidth = 1.6; c.stroke();
     } else {
       c.rotate(p.a); c.scale(1, Math.cos(p.a * 1.3)); c.fillStyle = p.color; c.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2);
     }
@@ -680,8 +974,33 @@ const GAMES = {
 //  がめんの きりかえ と HUD
 // ============================================================
 function show(id) {
-  ["home", "game", "result", "book"].forEach((s) => ($(s).hidden = s !== id));
+  ["home", "game", "result", "book", "shop", "feed"].forEach((s) => ($(s).hidden = s !== id));
+  if (id === "home") updateHungryBubble();
+  if (id === "shop") renderShop();
+  if (id === "feed") renderFoods();
   scrollTo(0, 0);
+}
+function renderLovePanel(el) {
+  if (!el) return;
+  const lv = loveLevel(), prog = loveProgress();
+  const heartCount = Math.min(5, Math.max(1, Math.ceil(lv / 2)));
+  el.innerHTML = `
+    <div class="lvrow"><span>なかよし <b>Lv.${lv}</b></span><span class="hearts">${"♥".repeat(heartCount)}</span></div>
+    <div class="bar"><i style="width:${Math.round(prog * 100)}%"></i></div>`;
+}
+function renderAllLovePanels() { document.querySelectorAll(".love").forEach(renderLovePanel); }
+function updateHungryBubble() {
+  const stage = $("home").querySelector(".stage");
+  if (!stage) return;
+  let b = stage.querySelector(".hungry");
+  const hungry = state.lastFed === 0 || Date.now() - state.lastFed > 3 * 60 * 60 * 1000;
+  if (hungry && !b) {
+    b = document.createElement("div");
+    b.className = "hungry"; b.textContent = "おなか すいた…🦐";
+    stage.appendChild(b);
+  } else if (!hungry && b) {
+    b.remove();
+  }
 }
 function renderHud() {
   document.querySelectorAll(".coinNum").forEach((el) => (el.textContent = state.coins));
@@ -689,7 +1008,30 @@ function renderHud() {
   $("soundBtn").classList.toggle("muted", !state.sound);
   $("lvEasy").setAttribute("aria-pressed", state.level === "easy");
   $("lvHard").setAttribute("aria-pressed", state.level === "hard");
+  const shopPill = $("shopStickerPill");
+  if (shopPill) shopPill.innerHTML = `🐋 <b>${state.stickers.length}</b>まい`;
+  renderAllLovePanels();
   if (game) { $("okNum").textContent = game.ok; $("ngNum").textContent = game.ng; }
+}
+// なかよし ポイントを ふやす（レベルアップ したら プレゼント）
+function addLove(n, stageEl) {
+  const before = loveLevel();
+  state.love += n; store.set("mk.love", state.love);
+  renderAllLovePanels();
+  const after = loveLevel();
+  if (after > before) {
+    const stage = stageEl || document.querySelector("section:not([hidden]) .stage");
+    if (stage) {
+      banner(stage, `なかよし Lv.${after}！`, true);
+      mood(stage, "happy", true);
+    }
+    confetti(40);
+    sfx.fanfare();
+    speak("なかよし レベルが あがったよ！ プレゼント！");
+    const sticker = pick(STICKERS);
+    state.stickers.push(sticker); store.set("mk.stickers", state.stickers);
+    renderHud();
+  }
 }
 function bumpCoins() {
   document.querySelectorAll(".pill.coin").forEach((p) => { p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump"); });
@@ -715,7 +1057,9 @@ function nextQuestion() {
   game.missed = false; game.locked = false; game.input = "";
   $("tag").textContent = NAMES[game.key];
   $("qno").textContent = `${game.index + 1}/${ROUND}`;
-  $("prompt").textContent = q.prompt;
+  const promptEl = $("prompt");
+  promptEl.textContent = q.prompt;
+  promptEl.classList.remove("pop"); void promptEl.offsetWidth; promptEl.classList.add("pop");
   $("content").innerHTML = q.stage;
   $("slots").hidden = q.kind !== "num";
   renderSlots();
@@ -835,6 +1179,185 @@ function openBook() {
   speak(`シールは ${state.stickers.length}まい あるよ`);
 }
 
+// ============================================================
+//  きせかえ ショップ
+// ============================================================
+let shopSlot = "head";
+function spendStickers(n) {
+  if (state.stickers.length < n) return false;
+  const counts = {};
+  state.stickers.forEach((s) => (counts[s] = (counts[s] || 0) + 1));
+  const arr = state.stickers.slice();
+  for (let k = 0; k < n; k++) {
+    let bestVal = null, bestCount = -1;
+    for (const v in counts) if (counts[v] > bestCount) { bestCount = counts[v]; bestVal = v; }
+    const idx = arr.lastIndexOf(bestVal);
+    if (idx >= 0) arr.splice(idx, 1);
+    counts[bestVal]--;
+    if (counts[bestVal] <= 0) delete counts[bestVal];
+  }
+  state.stickers = arr;
+  store.set("mk.stickers", state.stickers);
+  return true;
+}
+function canAfford(item) {
+  return item.price.shell != null ? state.coins >= item.price.shell : state.stickers.length >= item.price.sticker;
+}
+function priceLabel(item) {
+  return item.price.shell != null ? `🐚 ${item.price.shell}` : `シール ${item.price.sticker}`;
+}
+function renderShop() {
+  const grid = $("shopGrid");
+  $("shopTabs").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.slot === shopSlot));
+  const items = ITEMS.filter((i) => i.slot === shopSlot);
+  grid.innerHTML = items.map((item) => {
+    const owned = state.owned.includes(item.id);
+    const equipped = state.equip[item.slot] === item.id;
+    const locked = item.love && loveLevel() < item.love;
+    const visual = item.slot === "color" ? `<span class="swatch" style="background:${item.color}"></span>` : `<span class="e">${item.emoji}</span>`;
+    let statusHtml;
+    if (locked) statusHtml = `<span class="price">🔒 なかよし Lv.${item.love}</span>`;
+    else if (equipped) statusHtml = `<span class="price">つけてる</span>`;
+    else if (owned) statusHtml = `<span class="price">もってる</span>`;
+    else statusHtml = `<span class="price">${priceLabel(item)}</span>`;
+    return `<button class="item${owned ? " owned" : ""}${equipped ? " equip" : ""}${locked ? " locked" : ""}" data-id="${item.id}">
+      ${visual}<span class="nm">${item.name}</span>${statusHtml}
+    </button>`;
+  }).join("");
+  grid.querySelectorAll(".item").forEach((btn) => {
+    btn.addEventListener("click", () => buyOrEquip(ITEMS.find((i) => i.id === btn.dataset.id), btn));
+  });
+}
+function buyOrEquip(item, btn) {
+  const shopStage = $("shop").querySelector(".stage");
+  const locked = item.love && loveLevel() < item.love;
+  if (locked) {
+    btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake");
+    speak(`なかよし レベル ${item.love} に なると かえるよ`);
+    return;
+  }
+  const owned = state.owned.includes(item.id);
+  if (owned) {
+    sfx.tap();
+    if (item.slot === "color") state.equip.color = item.id;
+    else state.equip[item.slot] = state.equip[item.slot] === item.id ? null : item.id;
+    store.set("mk.equip", state.equip);
+    applyOutfit();
+    mood(shopStage, "happy", true);
+    renderShop();
+    return;
+  }
+  if (!canAfford(item)) {
+    btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake");
+    sfx.ng();
+    speak(item.price.shell != null ? "かいがらが たりないよ。 もんだいを といて あつめよう！" : "シールが たりないよ。 もんだいを といて あつめよう！");
+    return;
+  }
+  if (item.price.shell != null) { state.coins -= item.price.shell; store.set("mk.coins", state.coins); }
+  else { spendStickers(item.price.sticker); }
+  state.owned.push(item.id); store.set("mk.owned", state.owned);
+  if (item.slot === "color") state.equip.color = item.id; else state.equip[item.slot] = item.id;
+  store.set("mk.equip", state.equip);
+  applyOutfit();
+  const [x, y] = centerOf(btn);
+  burst(x, y, 22);
+  sfx.coin();
+  banner(shopStage, "ゲット！", false);
+  mood(shopStage, "happy", true);
+  speak(`${item.name}を ゲット！`);
+  renderHud();
+  renderShop();
+}
+
+// ============================================================
+//  ごはん・なかよし
+// ============================================================
+let feeding = false;
+function renderFoods() {
+  const grid = $("foodGrid");
+  grid.innerHTML = FOODS.map((f) => `
+    <button class="food-btn" data-id="${f.id}"><span class="e">${f.emoji}</span><span class="price">🐚 ${f.shell}</span></button>`).join("");
+  grid.querySelectorAll(".food-btn").forEach((btn) => {
+    btn.addEventListener("click", () => giveFood(FOODS.find((f) => f.id === btn.dataset.id), btn));
+  });
+}
+function giveFood(food, btn) {
+  if (feeding) return;
+  if (state.coins < food.shell) {
+    btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake");
+    sfx.ng();
+    speak("かいがらが たりないよ。 もんだいを といて あつめよう！");
+    return;
+  }
+  feeding = true;
+  $("foodGrid").querySelectorAll(".food-btn").forEach((b) => b.classList.add("ng"));
+  state.coins -= food.shell; store.set("mk.coins", state.coins);
+  renderHud();
+  const stage = $("feed").querySelector(".stage");
+  const hero = stage.querySelector(".tako.hero");
+  const [sx, sy] = centerOf(btn);
+  const [hx, hy] = centerOf(hero);
+  const fly = document.createElement("span");
+  fly.className = "flying-food"; fly.textContent = food.emoji;
+  fly.style.left = sx + "px"; fly.style.top = sy + "px"; fly.style.transform = "translate(-50%,-50%) scale(1)";
+  document.body.appendChild(fly);
+  requestAnimationFrame(() => {
+    fly.style.left = hx + "px"; fly.style.top = hy + "px";
+    fly.style.transform = "translate(-50%,-50%) scale(.4)";
+  });
+  setTimeout(() => {
+    fly.remove();
+    hero.classList.add("eat");
+    let toggles = 0;
+    const chew = setInterval(() => {
+      hero.classList.toggle("happy");
+      toggles++;
+      if (toggles >= 6) { clearInterval(chew); hero.classList.remove("happy", "eat"); }
+    }, 140);
+    hearts(hx, hy, 8);
+    sfx.tap(); tone(300, 0.06, 0.08, "square", 0.12); tone(260, 0.14, 0.1, "square", 0.12);
+    speak(pick(["もぐもぐ… おいしい！", "ありがとう！ だいすき！", "おなか いっぱい！"]));
+    state.lastFed = Date.now(); store.set("mk.fed", state.lastFed);
+    addLove(food.love, stage);
+    updateHungryBubble();
+  }, 700);
+  setTimeout(() => {
+    feeding = false;
+    $("foodGrid").querySelectorAll(".food-btn").forEach((b) => b.classList.remove("ng"));
+  }, 1500);
+}
+
+// ============================================================
+//  つねに うごく：あんびえんと パーティクル・アイドルモーション
+// ============================================================
+if (!reduced) {
+  setInterval(() => {
+    const visible = document.querySelector("section:not([hidden]) .stage");
+    if (!visible) return;
+    const r = visible.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return;
+    const x = r.left + Math.random() * r.width, y = r.top + r.height * (0.4 + Math.random() * 0.6);
+    if (Math.random() < 0.5) {
+      spawn({ type: "spark", x, y, vx: (Math.random() - 0.5) * 1.5, vy: -0.4 - Math.random() * 0.6, g: 0.01,
+        r: 3 + Math.random() * 3, a: Math.random() * 6, va: 0.25, life: 35 + Math.random() * 10, color: pick(["#fff", "#FFD34D"]) });
+    } else {
+      spawn({ type: "bubble", x, y: r.top + r.height - 4, vx: (Math.random() - 0.5) * 0.4, vy: -0.8 - Math.random() * 0.8, g: -0.01,
+        r: 5 + Math.random() * 6, a: 0, va: 0, life: 60 + Math.random() * 30, color: "#fff" });
+    }
+  }, 350);
+
+  setInterval(() => {
+    document.querySelectorAll(".tako.hero").forEach((t) => {
+      const r = t.getBoundingClientRect();
+      if (r.width < 2) return;
+      if (t.classList.contains("happy") || t.classList.contains("sad") || t.classList.contains("jump") || t.classList.contains("jump2")) return;
+      const act = pick(["spin", "wave", "peek"]);
+      t.classList.add(act);
+      setTimeout(() => t.classList.remove(act), 1200);
+    });
+  }, 5000);
+}
+
 // ---------- ボタンの つなぎこみ ----------
 document.querySelectorAll("[data-game]").forEach((b) => b.addEventListener("click", () => { sfx.tap(); startGame(b.dataset.game); }));
 $("soundBtn").addEventListener("click", () => { state.sound = !state.sound; store.set("mk.sound", state.sound); renderHud(); speak("おとを だすよ"); });
@@ -846,5 +1369,12 @@ $("againBtn").addEventListener("click", () => startGame(game.key));
 $("homeBtn").addEventListener("click", () => show("home"));
 $("bookBtn").addEventListener("click", openBook);
 $("bookBack").addEventListener("click", () => show("home"));
+$("feedBtn").addEventListener("click", () => { sfx.tap(); show("feed"); });
+$("shopBtn").addEventListener("click", () => { sfx.tap(); show("shop"); });
+$("feedBack").addEventListener("click", () => show("home"));
+$("shopBack").addEventListener("click", () => show("home"));
+$("shopTabs").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { sfx.tap(); shopSlot = b.dataset.slot; renderShop(); }));
+applyOutfit();
 renderHud();
+show("home");
 </script>
