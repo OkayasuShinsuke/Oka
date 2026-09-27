@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Advanced Lab — 電磁気学・東大数学</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.18.9/contrib/auto-render.min.js"></script>
+<style>
+  /* ============================================================
+     色・タイポグラフィの「トークン」
+     ラボノート／基盤(PCB)風。ライト＝方眼紙のノート、ダーク＝実験室の基盤。
+     ============================================================ */
+  :root {
+    --bg: #f3f1ea;
+    --bg-grid: rgba(30,40,50,.06);
+    --panel: #ffffff;
+    --panel-2: #ecebe3;
+    --ink: #1b2430;
+    --ink-dim: #5b6472;
+    --line: #d9d6c9;
+    --accent: #1f6f5c;      /* 深緑：電磁気・正解 */
+    --accent-2: #b5502f;    /* 銅色：数学・強調 */
+    --accent-3: #2b5fa8;    /* 青：情報・XP */
+    --ok: #1f8a4c;
+    --ng: #c23b3b;
+    --shadow: rgba(30,20,10,.14);
+    --serif: "Zen Kaku Gothic New", "Hiragino Mincho ProN", serif;
+    --sans: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c1210;
+      --bg-grid: rgba(120,255,210,.05);
+      --panel: #121a17;
+      --panel-2: #182420;
+      --ink: #e7f3ec;
+      --ink-dim: #8fa89c;
+      --line: #24352e;
+      --accent: #4fd8ab;
+      --accent-2: #ff9d66;
+      --accent-3: #7ab6ff;
+      --ok: #4fd8ab;
+      --ng: #ff6b6b;
+      --shadow: rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1210;
+    --bg-grid: rgba(120,255,210,.05);
+    --panel: #121a17;
+    --panel-2: #182420;
+    --ink: #e7f3ec;
+    --ink-dim: #8fa89c;
+    --line: #24352e;
+    --accent: #4fd8ab;
+    --accent-2: #ff9d66;
+    --accent-3: #7ab6ff;
+    --ok: #4fd8ab;
+    --ng: #ff6b6b;
+    --shadow: rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      linear-gradient(var(--bg-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    transition: background-color .2s, color .2s;
+  }
+  .app { max-width: 640px; margin: 0 auto; min-height: 100%; padding: 12px 16px 28px; }
+  button { font-family: inherit; color: inherit; cursor: pointer; background: none; border: none; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-3); outline-offset: 2px; }
+  h1, h2, h3 { font-family: var(--sans); margin: 0; }
+  p { margin: 0; }
+
+  /* ===== ヘッダー：HUD（XP・ストリーク・テーマ切替） ===== */
+  header.hud {
+    display: flex; align-items: center; gap: 8px; padding: 8px 4px 14px;
+    border-bottom: 1px solid var(--line); margin-bottom: 14px;
+  }
+  .brand { display: flex; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
+  .brand .mark { color: var(--accent); font-family: var(--mono); font-weight: 700; }
+  .brand h1 { font-size: 1.02rem; font-weight: 700; letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat { display: flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: .82rem; color: var(--ink-dim); white-space: nowrap; }
+  .stat b { color: var(--ink); font-weight: 700; font-size: .95rem; }
+  .stat.xp b { color: var(--accent-3); }
+  .stat.streak b { color: var(--accent-2); }
+  .iconbtn {
+    width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel); flex: none; font-size: 1rem;
+  }
+  .iconbtn:active { transform: translateY(1px); }
+
+  /* ===== 汎用パネル・カード ===== */
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px; box-shadow: 0 1px 0 var(--shadow);
+  }
+  .lead { color: var(--ink-dim); font-size: .88rem; line-height: 1.6; margin: 6px 0 18px; }
+  section#screens > section { display: flex; flex-direction: column; gap: 14px; }
+
+  /* ===== 科目・単元選択 ===== */
+  .subjectGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 480px) { .subjectGrid { grid-template-columns: 1fr; } }
+  .subjectCard {
+    text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+    padding: 18px; display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden;
+  }
+  .subjectCard::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: var(--bar, var(--accent));
+  }
+  .subjectCard.em { --bar: var(--accent); }
+  .subjectCard.math { --bar: var(--accent-2); }
+  .subjectCard .tag { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; color: var(--ink-dim); text-transform: uppercase; }
+  .subjectCard .ttl { font-size: 1.15rem; font-weight: 700; }
+  .subjectCard .desc { font-size: .82rem; color: var(--ink-dim); line-height: 1.5; }
+  .subjectCard:active { transform: translateY(1px); }
+
+  .unitList { display: flex; flex-direction: column; gap: 10px; }
+  .unitRow {
+    display: flex; align-items: center; gap: 12px; text-align: left; width: 100%;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px;
+  }
+  .unitRow:active { transform: translateY(1px); }
+  .unitRow .idx { font-family: var(--mono); font-size: .78rem; color: var(--ink-dim); width: 1.6em; flex: none; }
+  .unitRow .body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .unitRow .name { font-weight: 700; font-size: .98rem; }
+  .unitRow .meta { font-size: .74rem; color: var(--ink-dim); font-family: var(--mono); }
+  .unitRow .stat-badge {
+    font-family: var(--mono); font-size: .72rem; padding: 3px 8px; border-radius: 999px;
+    background: var(--panel-2); color: var(--ink-dim); flex: none;
+  }
+  .unitRow .stat-badge.hasdata { color: var(--accent); border: 1px solid var(--line); }
+
+  .backRow { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .backBtn {
+    display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--ink-dim);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: var(--panel);
+  }
+  .backBtn:active { transform: translateY(1px); }
+  .screenTitle { font-size: 1.2rem; font-weight: 700; }
+  .breadcrumb { font-family: var(--mono); font-size: .74rem; color: var(--ink-dim); }
+
+  /* ===== 出題画面 ===== */
+  .qnoRow { display: flex; justify-content: space-between; align-items: baseline; }
+  .qtag { font-family: var(--mono); font-size: .74rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  .qcounter { font-family: var(--mono); font-size: .78rem; color: var(--ink-dim); }
+  .qbody { font-size: 1.05rem; line-height: 1.9; }
+  .qbody .katex { font-size: 1.06em; }
+  .given { margin-top: 4px; font-size: .92rem; color: var(--ink-dim); line-height: 1.7; }
+  .given .katex { font-size: 1em; }
+
+  .answerRow { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  .answerRow input {
+    flex: 1; min-width: 0; font-family: var(--mono); font-size: 1.1rem; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--ink);
+  }
+  .unitSuffix { font-family: var(--mono); font-size: .9rem; color: var(--ink-dim); }
+  .primaryBtn {
+    background: var(--accent); color: #fff; border-radius: 8px; padding: 12px 22px;
+    font-weight: 700; font-size: .95rem; letter-spacing: .01em; white-space: nowrap;
+  }
+  .primaryBtn:active { transform: translateY(1px); }
+  .primaryBtn.wide { width: 100%; }
+  .primaryBtn:disabled { opacity: .4; cursor: default; }
+  .ghostBtn {
+    border: 1px solid var(--line); border-radius: 8px; padding: 11px 18px; font-size: .9rem; color: var(--ink-dim);
+  }
+  .ghostBtn:active { transform: translateY(1px); }
+  .hint { font-size: .78rem; color: var(--ink-dim); }
+
+  /* ===== 解答画面 ===== */
+  .verdict { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; font-weight: 700; }
+  .verdict.correct { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+  .verdict.wrong { background: color-mix(in srgb, var(--ng) 14%, transparent); color: var(--ng); }
+  .verdict .big { font-size: 1.3rem; }
+  .answerLine { font-size: 1rem; }
+  .answerLine .katex { font-size: 1.08em; }
+  .steps { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .step { display: flex; gap: 12px; align-items: flex-start; }
+  .step .n {
+    flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--panel-2);
+    color: var(--ink-dim); font-family: var(--mono); font-size: .72rem; display: grid; place-items: center;
+    margin-top: 2px; border: 1px solid var(--line);
+  }
+  .step .txt { flex: 1; font-size: .96rem; line-height: 1.75; }
+  .step .txt .katex-display { margin: .35em 0; }
+  .divider { border-top: 1px solid var(--line); margin: 6px 0; }
+  .selfGrade { display: flex; flex-direction: column; gap: 10px; }
+  .selfGrade .prompt { font-size: .9rem; color: var(--ink-dim); }
+  .selfGradeBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .gradeBtn {
+    border-radius: 10px; padding: 14px; font-weight: 700; font-size: .95rem; border: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .gradeBtn.good { background: color-mix(in srgb, var(--ok) 12%, var(--panel)); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+  .gradeBtn.bad { background: color-mix(in srgb, var(--ng) 12%, var(--panel)); color: var(--ng); border-color: color-mix(in srgb, var(--ng) 40%, var(--line)); }
+  .gradeBtn:active { transform: translateY(1px); }
+  .gradeBtn .e { font-size: 1.3rem; }
+  .gradeBtn:disabled { opacity: .35; }
+  .xpToast {
+    font-family: var(--mono); font-size: .8rem; color: var(--accent-3); text-align: center;
+    animation: fadein .25s ease;
+  }
+  @keyframes fadein { from { opacity: 0; transform: translateY(-4px); } }
+
+  .afterRow { display: flex; gap: 10px; }
+  .afterRow button { flex: 1; }
+
+  footer.note { margin-top: 20px; font-size: .74rem; color: var(--ink-dim); text-align: center; line-height: 1.6; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="hud">
+    <div class="brand"><span class="mark">&gt;_</span><h1 id="hudTitle">Advanced Lab</h1></div>
+    <span class="stat streak" title="連続学習日数">🔥<b id="streakNum">0</b></span>
+    <span class="stat xp" title="経験値">XP<b id="xpNum">0</b></span>
+    <button class="iconbtn" id="themeBtn" aria-label="テーマ切替" title="テーマ切替">🌓</button>
+    <button class="iconbtn" id="soundBtn" aria-label="音のオン/オフ" title="音のオン/オフ">🔔</button>
+  </header>
+
+  <section id="screens">
+    <!-- ===== 科目選択 ===== -->
+    <section id="home">
+      <p class="lead">科目を選んでください。電磁気学は乱数生成、東大数学は厳選バンク方式です。どちらも途中式を省略せずに解説します。</p>
+      <div class="subjectGrid">
+        <button class="subjectCard em" data-subject="em">
+          <span class="tag">Physics</span>
+          <span class="ttl">電磁気学</span>
+          <span class="desc">クーロンの法則・オームの法則・コンデンサなど。パラメータは毎回ランダム生成、答えは同じ式から自動計算します。</span>
+        </button>
+        <button class="subjectCard math" data-subject="math">
+          <span class="tag">Mathematics</span>
+          <span class="ttl">東大入試レベル数学</span>
+          <span class="desc">微積分・確率・数列などの厳選問題。丁寧な途中式つきの解答を用意しています。</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ===== 単元選択 ===== -->
+    <section id="units" hidden>
+      <div class="backRow">
+        <button class="backBtn" data-back="home">← 科目選択</button>
+      </div>
+      <p class="screenTitle" id="unitsTitle">単元を選択</p>
+      <div class="unitList" id="unitList"></div>
+    </section>
+
+    <!-- ===== 出題画面 ===== -->
+    <section id="quiz" hidden>
+      <div class="backRow">
+        <button class="backBtn" data-back="units">← 単元選択</button>
+        <span class="breadcrumb" id="quizBreadcrumb"></span>
+      </div>
+      <div class="panel">
+        <div class="qnoRow">
+          <span class="qtag" id="qTag"></span>
+          <span class="qcounter" id="qCounter"></span>
+        </div>
+        <p class="qbody" id="qBody"></p>
+        <p class="given" id="qGiven" hidden></p>
+        <div class="answerRow">
+          <input id="qInput" type="text" inputmode="decimal" autocomplete="off" placeholder="答えを入力" />
+          <span class="unitSuffix" id="qUnitSuffix"></span>
+        </div>
+        <p class="hint" id="qHint" hidden></p>
+        <div class="answerRow" style="margin-top:10px;">
+          <button class="primaryBtn wide" id="submitBtn">解答する</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 解答（解説）画面 ===== -->
+    <section id="solution" hidden>
+      <div class="backRow">
+        <span class="breadcrumb" id="solBreadcrumb"></span>
+      </div>
+      <div class="panel">
+        <div class="verdict" id="verdictBox">
+          <span class="big" id="verdictIcon"></span>
+          <span id="verdictText"></span>
+        </div>
+        <p class="answerLine" id="answerLine" style="margin-top:14px;"></p>
+        <div class="divider"></div>
+        <div class="steps" id="stepsBox"></div>
+      </div>
+
+      <!-- ===== 自己採点 ===== -->
+      <div class="panel selfGrade" id="selfGradePanel">
+        <p class="prompt">自分の解答をふりかえって、正直に記録してください（間隔反復の材料になります）。</p>
+        <div class="selfGradeBtns">
+          <button class="gradeBtn good" id="gradeGood"><span class="e">◎</span>できた</button>
+          <button class="gradeBtn bad" id="gradeBad"><span class="e">✕</span>できなかった</button>
+        </div>
+        <p class="xpToast" id="xpToast" hidden></p>
+      </div>
+
+      <div class="afterRow">
+        <button class="ghostBtn" id="nextInUnitBtn">この単元をもう一問</button>
+        <button class="primaryBtn" id="toUnitsBtn">単元選択へ</button>
+      </div>
+    </section>
+  </section>
+
+  <footer class="note">数式表示: KaTeX 0.18.9（CDN）。誤り・改善提案は歓迎します。学習記録はこの端末のブラウザにのみ保存されます。</footer>
+</div>
+
+<script>
+// ============================================================
+//  Advanced Lab — 電磁気学・東大数学 学習アプリ（単一HTMLファイル）
+// ============================================================
+
+// ---------- 便利関数（まなびっこと同じパターン） ----------
+const $ = (id) => document.getElementById(id);
+const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const randf = (a, b, step = 1) => { const n = Math.round((a + Math.random() * (b - a)) / step) * step; return n; };
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// 数値を「見やすい有効数字」に整形（末尾ゼロを削る）
+function fmt(n, digits = 4) {
+  if (!Number.isFinite(n)) return String(n);
+  if (Math.abs(n) >= 1e6 || (Math.abs(n) < 1e-4 && n !== 0)) return n.toExponential(2);
+  const r = Number(n.toPrecision(digits));
+  return String(r);
+}
+
+// ---------- 保存（使えない環境でも止まらないよう try/catch） ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+const state = {
+  theme: store.get("adv.theme", null),      // null=システム設定に従う, "light" / "dark"
+  sound: store.get("adv.sound", true),
+  xp: store.get("adv.xp", 0),
+  streak: store.get("adv.streak", 0),
+  lastStudyDay: store.get("adv.lastStudyDay", null),
+  // 正誤履歴: { problemId, correct, timestamp } の配列。
+  // 将来の間隔反復（SM-2風）ロジックがこの形をそのまま使える設計にしている。
+  history: store.get("adv.history", []),
+};
+if (state.theme) document.documentElement.setAttribute("data-theme", state.theme);
+
+function saveState() {
+  store.set("adv.xp", state.xp);
+  store.set("adv.streak", state.streak);
+  store.set("adv.lastStudyDay", state.lastStudyDay);
+  store.set("adv.history", state.history);
+}
+
+function bumpStreakIfNewDay() {
+  const today = todayStr();
+  if (state.lastStudyDay === today) return;
+  const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  state.streak = state.lastStudyDay === y ? state.streak + 1 : 1;
+  state.lastStudyDay = today;
+  saveState();
+}
+
+function addXp(n) {
+  state.xp += n;
+  saveState();
+  renderHud();
+}
+
+// 正誤履歴を1件追加する（間隔反復の後続タスクがそのまま参照できる形）
+function recordAttempt(problemId, correct) {
+  state.history.push({ problemId, correct, timestamp: Date.now() });
+  // 履歴が無限に増え続けないよう直近2000件に制限
+  if (state.history.length > 2000) state.history = state.history.slice(-2000);
+  saveState();
+}
+
+function renderHud() {
+  $("xpNum").textContent = state.xp;
+  $("streakNum").textContent = state.streak;
+}
+
+// ---------- 音（Web Audio API のオシレーター合成。まなびっこと同じパターンだが控えめに） ----------
+let audio = null;
+function tone(freq, start, dur, type = "sine", vol = 0.1) {
+  if (!state.sound) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const t = audio.currentTime + start, o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur);
+  } catch {}
+}
+const sfx = {
+  correct() { tone(660, 0, 0.09, "sine", 0.09); tone(880, 0.08, 0.16, "sine", 0.09); },
+  wrong() { tone(220, 0, 0.16, "sine", 0.1); tone(180, 0.12, 0.22, "sine", 0.1); },
+  tap() { tone(500, 0, 0.04, "sine", 0.05); },
+};
+
+// ---------- 読み上げは学習アプリとしては不要のため実装しない（まなびっこと異なる方針） ----------
+
+// ============================================================
+//  KaTeX レンダリング（CDN失敗時はプレーンテキストにフォールバック）
+// ============================================================
+function renderMath(container) {
+  if (!container) return;
+  try {
+    if (window.renderMathInElement) {
+      window.renderMathInElement(container, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "\\(", right: "\\)", display: false },
+        ],
+        throwOnError: false,
+      });
+    }
+    // renderMathInElement 自体が無い（CDN読み込み失敗）場合は何もしない
+    // → "$...$" 付きのプレーンテキストがそのまま表示され、アプリは壊れずに使える
+  } catch (e) {
+    console.warn("KaTeX render failed, falling back to plain text:", e);
+  }
+}
+
+// ============================================================
+//  電磁気学：ジェネレーター方式
+//  各トピックは { param生成 → 同じ式から出題文・答え・途中式を作る } 関数を持つ。
+//  「出題に使う式」と「採点に使う式」が絶対にズレないよう、
+//  answer は必ずこの関数内の同じ変数から計算する。
+// ============================================================
+const K_COULOMB = 8.99e9; // クーロン定数 [N·m^2/C^2]（有効数字3桁で表示に使う）
+
+const EM_TOPICS = {
+  coulomb: {
+    name: "クーロンの法則",
+    meta: "静電気力 / 高校物理",
+    unitLabel: "N",
+    gen() {
+      // q1, q2 は µC 単位の乱数、r は cm 単位の乱数（扱いやすい桁にする）
+      const q1uC = rand(1, 9), q2uC = rand(1, 9);
+      const rCm = rand(10, 60);
+      const q1 = q1uC * 1e-6, q2 = q2uC * 1e-6, r = rCm / 100; // SI単位に変換
+      const F = (K_COULOMB * q1 * q2) / (r * r); // ← 出題にも採点にもこの式を使う
+      return {
+        vars: { q1uC, q2uC, rCm, q1, q2, r, F },
+        prompt: `真空中に、電荷 $q_1 = ${q1uC}\\,\\mu\\text{C}$ と $q_2 = ${q2uC}\\,\\mu\\text{C}$ の点電荷が、` +
+          `距離 $r = ${rCm}\\,\\text{cm}$ だけ離れて置かれている。両者の間にはたらくクーロン力の大きさ $F$ を求めよ。`,
+        given: `クーロン定数 $k = 8.99\\times10^{9}\\,\\text{N·m}^2/\\text{C}^2$ とする。`,
+        answer: F,
+        unitLabel: "N",
+        digits: 3,
+        steps: [
+          `クーロンの法則は $F = k\\dfrac{|q_1 q_2|}{r^2}$ である。`,
+          `単位をSI単位に直す：$q_1 = ${q1uC}\\,\\mu\\text{C} = ${q1.toExponential(2)}\\,\\text{C}$、` +
+            `$q_2 = ${q2uC}\\,\\mu\\text{C} = ${q2.toExponential(2)}\\,\\text{C}$、$r = ${rCm}\\,\\text{cm} = ${r}\\,\\text{m}$。`,
+          `代入すると $F = 8.99\\times10^{9} \\times \\dfrac{${q1.toExponential(2)} \\times ${q2.toExponential(2)}}{(${r})^2}$`,
+          `$F = 8.99\\times10^{9} \\times \\dfrac{${(q1 * q2).toExponential(3)}}{${(r * r).toExponential(3)}}$`,
+          `よって $F \\approx ${fmt(F, 3)}\\,\\text{N}$。`,
+        ],
+      };
+    },
+  },
+  ohm: {
+    name: "オームの法則・直列/並列合成抵抗",
+    meta: "回路 / 高校物理",
+    unitLabel: "A",
+    gen() {
+      const V = rand(6, 24);              // 電源電圧 [V]
+      const R1 = rand(2, 20), R2 = rand(2, 20); // 抵抗 [Ω]
+      const series = Math.random() < 0.5;
+      const Rtotal = series ? R1 + R2 : (R1 * R2) / (R1 + R2); // ← 出題・採点共通の式
+      const I = V / Rtotal; // ← 全体を流れる電流（回路の主答）
+      const connectLabel = series ? "直列" : "並列";
+      const combineFormula = series
+        ? `R_{12} = R_1 + R_2`
+        : `\\dfrac{1}{R_{12}} = \\dfrac{1}{R_1} + \\dfrac{1}{R_2}`;
+      return {
+        vars: { V, R1, R2, Rtotal, I, series },
+        prompt: `起電力 $V = ${V}\\,\\text{V}$ の電源に、抵抗 $R_1 = ${R1}\\,\\Omega$ と $R_2 = ${R2}\\,\\Omega$ を` +
+          `${connectLabel}に接続した。回路全体を流れる電流 $I$ を求めよ。`,
+        given: `内部抵抗は無視できるものとする。`,
+        answer: I,
+        unitLabel: "A",
+        digits: 3,
+        steps: [
+          `まず合成抵抗 $R_{12}$ を求める。${connectLabel}接続なので $${combineFormula}$ が成り立つ。`,
+          series
+            ? `代入すると $R_{12} = ${R1} + ${R2} = ${Rtotal}\\,\\Omega$。`
+            : `代入すると $\\dfrac{1}{R_{12}} = \\dfrac{1}{${R1}} + \\dfrac{1}{${R2}} = \\dfrac{${R1}+${R2}}{${R1}\\times${R2}}$、` +
+              `よって $R_{12} = \\dfrac{${R1}\\times${R2}}{${R1}+${R2}} = ${fmt(Rtotal, 4)}\\,\\Omega$。`,
+          `オームの法則 $V = IR_{12}$ より $I = \\dfrac{V}{R_{12}}$。`,
+          `代入すると $I = \\dfrac{${V}}{${fmt(Rtotal, 4)}}$`,
+          `よって $I \\approx ${fmt(I, 3)}\\,\\text{A}$。`,
+        ],
+      };
+    },
+  },
+  capacitor: {
+    name: "コンデンサの合成容量",
+    meta: "静電容量 / 高校物理",
+    unitLabel: "µF",
+    gen() {
+      const C1 = rand(2, 20), C2 = rand(2, 20); // µF
+      const series = Math.random() < 0.5;
+      const Ctotal = series ? (C1 * C2) / (C1 + C2) : C1 + C2; // ← コンデンサは抵抗と逆
+      const connectLabel = series ? "直列" : "並列";
+      const combineFormula = series
+        ? `\\dfrac{1}{C_{12}} = \\dfrac{1}{C_1} + \\dfrac{1}{C_2}`
+        : `C_{12} = C_1 + C_2`;
+      return {
+        vars: { C1, C2, Ctotal, series },
+        prompt: `静電容量 $C_1 = ${C1}\\,\\mu\\text{F}$ と $C_2 = ${C2}\\,\\mu\\text{F}$ のコンデンサを` +
+          `${connectLabel}に接続した。合成容量 $C_{12}$ を求めよ。`,
+        given: `コンデンサの初期電荷は $0$ とする。`,
+        answer: Ctotal,
+        unitLabel: "µF",
+        digits: 4,
+        steps: [
+          `${connectLabel}接続の合成容量は $${combineFormula}$ で与えられる` +
+            `（コンデンサは抵抗と直列・並列の式が入れ替わることに注意）。`,
+          series
+            ? `代入すると $\\dfrac{1}{C_{12}} = \\dfrac{1}{${C1}} + \\dfrac{1}{${C2}} = \\dfrac{${C1}+${C2}}{${C1}\\times${C2}}$、` +
+              `よって $C_{12} = \\dfrac{${C1}\\times${C2}}{${C1}+${C2}} = ${fmt(Ctotal, 4)}\\,\\mu\\text{F}$。`
+            : `代入すると $C_{12} = ${C1} + ${C2} = ${Ctotal}\\,\\mu\\text{F}$。`,
+          `よって合成容量は $C_{12} \\approx ${fmt(Ctotal, 4)}\\,\\mu\\text{F}$。`,
+        ],
+      };
+    },
+  },
+};
+
+// ============================================================
+//  東大入試レベル数学：バンク方式（手作り厳選問題）
+//  各問題は id・単元タグ・prompt・answer（文字列表示用）・
+//  checkAnswer（数値判定）・steps を持つ。
+//  ※ 下の3問はすべて実装時に手計算で検算済み（コメントに検算過程を残す）。
+// ============================================================
+const MATH_BANK = [
+  {
+    id: "math-calc-1",
+    unit: "微積分",
+    meta: "積分・面積",
+    prompt: `関数 $f(x) = x^3 - 3x + 2$ のグラフと $x$ 軸で囲まれた部分のうち，$-2 \\le x \\le 1$ の範囲にある部分の面積 $S$ を求めよ。`,
+    given: `必要なら $f(x)$ の因数分解を用いてよい。`,
+    // 検算: f(x) = x^3-3x+2 = (x-1)^2(x+2)。 [-2,1] で f(x)>=0 (二重根x=1で符号変化なし、x=-2で0)。
+    // よって S = ∫_{-2}^{1} (x^3-3x+2) dx = [x^4/4 - 3x^2/2 + 2x] から -2..1
+    // 上端(x=1): 1/4 - 3/2 + 2 = 0.75
+    // 下端(x=-2): 16/4 - 3*4/2 + 2*(-2) = 4 - 6 - 4 = -6
+    // S = 0.75 - (-6) = 6.75 = 27/4
+    answerDisplay: `\\dfrac{27}{4}`,
+    answerValue: 27 / 4,
+    tolerance: 1e-6,
+    unitLabel: "",
+    steps: [
+      `まず $f(x)$ を因数分解する。$f(1) = 1 - 3 + 2 = 0$ なので $x=1$ は解の一つ。組立除法により` +
+        `$f(x) = (x-1)(x^2+x-2) = (x-1)(x-1)(x+2) = (x-1)^2(x+2)$。`,
+      `区間 $-2 \\le x \\le 1$ において，$(x-1)^2 \\ge 0$ は常に成り立ち，$x+2 \\ge 0$（等号は $x=-2$）なので、` +
+        `$f(x) = (x-1)^2(x+2) \\ge 0$。つまりこの区間で $f(x)$ は $x$ 軸より下に出ないので、面積は積分の値そのもの。`,
+      `$S = \\displaystyle\\int_{-2}^{1} (x^3 - 3x + 2)\\,dx = \\left[\\dfrac{x^4}{4} - \\dfrac{3x^2}{2} + 2x\\right]_{-2}^{1}$`,
+      `$x=1$ を代入：$\\dfrac{1}{4} - \\dfrac{3}{2} + 2 = \\dfrac{1 - 6 + 8}{4} = \\dfrac{3}{4}$`,
+      `$x=-2$ を代入：$\\dfrac{16}{4} - \\dfrac{3 \\cdot 4}{2} + 2\\cdot(-2) = 4 - 6 - 4 = -6$`,
+      `したがって $S = \\dfrac{3}{4} - (-6) = \\dfrac{3}{4} + 6 = \\dfrac{27}{4}$。`,
+    ],
+  },
+  {
+    id: "math-prob-1",
+    unit: "確率",
+    meta: "サイコロ・条件付き確率",
+    prompt: `2つのさいころを同時に投げる。出た目の和が $8$ であったとき，少なくとも一方の目が $2$ である条件付き確率を求めよ。`,
+    given: `2つのさいころは区別して考える。`,
+    // 検算: 和が8になる組(a,b): (2,6)(3,5)(4,4)(5,3)(6,2) の5通り。
+    // このうち少なくとも一方が2の組: (2,6)のみ (6,2は別だがそれも2を含む) → (2,6)と(6,2)の2通り。
+    // よって条件付き確率 = 2/5。
+    answerDisplay: `\\dfrac{2}{5}`,
+    answerValue: 2 / 5,
+    tolerance: 1e-6,
+    unitLabel: "",
+    steps: [
+      `事象 $A$：「目の和が $8$」、事象 $B$：「少なくとも一方の目が $2$」とし，求めるのは $P(B\\mid A)$。`,
+      `$A$ が起こる $(a,b)$ の組をすべて挙げる：$a+b=8$ を満たす $1\\le a,b\\le 6$ の組は` +
+        `$(2,6),(3,5),(4,4),(5,3),(6,2)$ の $5$ 通り。よって $n(A) = 5$。`,
+      `このうち少なくとも一方が $2$ であるものは $(2,6)$ と $(6,2)$ の $2$ 通り。よって $n(A\\cap B) = 2$。`,
+      `条件付き確率は $P(B\\mid A) = \\dfrac{n(A\\cap B)}{n(A)} = \\dfrac{2}{5}$。`,
+    ],
+  },
+  {
+    id: "math-seq-1",
+    unit: "数列",
+    meta: "漸化式・一般項",
+    prompt: `数列 $\\{a_n\\}$ が $a_1 = 1$，$a_{n+1} = 2a_n + 1$（$n = 1, 2, 3, \\dots$）を満たすとき，一般項 $a_n$ を求めよ。` +
+      `また $a_5$ の値を答えよ（数値のみで解答すること）。`,
+    given: `解答欄には $a_5$ の値を入力してください。一般項の式は解説を参照。`,
+    // 検算: a_{n+1}+1 = 2(a_n+1)。b_n=a_n+1, b_1=2, b_n=2*2^{n-1}=2^n。a_n=2^n -1。
+    // a1=2^1-1=1 OK. a2=2*1+1=3, 2^2-1=3 OK. a5 = 2^5-1=31。
+    answerDisplay: `31`,
+    answerValue: 31,
+    tolerance: 1e-9,
+    unitLabel: "",
+    steps: [
+      `漸化式 $a_{n+1} = 2a_n + 1$ の両辺に $1$ を加えると $a_{n+1} + 1 = 2a_n + 2 = 2(a_n + 1)$。`,
+      `$b_n = a_n + 1$ とおくと $b_{n+1} = 2 b_n$ となり，$\\{b_n\\}$ は初項 $b_1 = a_1 + 1 = 2$，公比 $2$ の等比数列。`,
+      `よって $b_n = 2 \\cdot 2^{n-1} = 2^n$。したがって $a_n = b_n - 1 = 2^n - 1$。`,
+      `検算：$a_1 = 2^1 - 1 = 1$（条件と一致），$a_2 = 2a_1+1 = 3 = 2^2-1$（一致）。`,
+      `$a_5 = 2^5 - 1 = 32 - 1 = 31$。`,
+    ],
+  },
+];
+
+// ============================================================
+//  科目・単元データ（画面遷移用の統一インターフェース）
+// ============================================================
+const SUBJECTS = {
+  em: { name: "電磁気学", kind: "generator", topics: EM_TOPICS },
+  math: { name: "東大入試レベル数学", kind: "bank", bank: MATH_BANK },
+};
+
+// 現在の学習セッションの状態
+let session = {
+  subject: null,     // "em" | "math"
+  topicKey: null,     // em: EM_TOPICSのキー / math: 単元名でグルーピングして使う
+  problem: null,       // 現在の問題データ（gen()の返り値、またはbankの1件）
+  problemId: null,     // 履歴記録用のID
+  submitted: null,      // ユーザーの入力値（文字列）
+  correct: null,         // 自己採点前の自動判定（正誤の目安として表示にも使う）
+};
+
+// ============================================================
+//  画面切り替え（まなびっこの show() と同じパターン）
+// ============================================================
+function show(id) {
+  ["home", "units", "quiz", "solution"].forEach((s) => ($(s).hidden = s !== id));
+  scrollTo(0, 0);
+}
+
+// ============================================================
+//  単元選択画面
+// ============================================================
+function unitStatsFor(problemIdPrefix) {
+  const rows = state.history.filter((h) => h.problemId.startsWith(problemIdPrefix));
+  if (!rows.length) return null;
+  const correct = rows.filter((r) => r.correct).length;
+  return { total: rows.length, correct };
+}
+
+function openUnits(subjectKey) {
+  session.subject = subjectKey;
+  const subj = SUBJECTS[subjectKey];
+  $("unitsTitle").textContent = subj.name + " — 単元選択";
+  const list = $("unitList");
+  list.innerHTML = "";
+
+  if (subj.kind === "generator") {
+    Object.entries(subj.topics).forEach(([key, topic], i) => {
+      const st = unitStatsFor(`em:${key}:`);
+      const badge = st ? `${st.correct}/${st.total} できた` : "未挑戦";
+      const row = document.createElement("button");
+      row.className = "unitRow";
+      row.innerHTML = `<span class="idx">${String(i + 1).padStart(2, "0")}</span>
+        <span class="body"><span class="name">${topic.name}</span><span class="meta">${topic.meta}</span></span>
+        <span class="stat-badge${st ? " hasdata" : ""}">${badge}</span>`;
+      row.addEventListener("click", () => startGeneratorProblem(key));
+      list.appendChild(row);
+    });
+  } else {
+    // 数学バンクは単元タグでグルーピングして表示
+    const units = [...new Set(subj.bank.map((p) => p.unit))];
+    units.forEach((unitName, i) => {
+      const problems = subj.bank.filter((p) => p.unit === unitName);
+      const st = unitStatsFor(`math:${unitName}:`);
+      const badge = st ? `${st.correct}/${st.total} できた` : `全${problems.length}問`;
+      const row = document.createElement("button");
+      row.className = "unitRow";
+      row.innerHTML = `<span class="idx">${String(i + 1).padStart(2, "0")}</span>
+        <span class="body"><span class="name">${unitName}</span><span class="meta">${problems[0].meta}</span></span>
+        <span class="stat-badge${st ? " hasdata" : ""}">${badge}</span>`;
+      row.addEventListener("click", () => startBankProblem(unitName));
+      list.appendChild(row);
+    });
+  }
+  show("units");
+}
+
+// ============================================================
+//  出題（電磁気学：ジェネレーター）
+// ============================================================
+function startGeneratorProblem(topicKey) {
+  const topic = EM_TOPICS[topicKey];
+  const problem = topic.gen(); // ← 出題も採点もこの1回の呼び出しの結果だけを使う
+  session.topicKey = topicKey;
+  session.problem = problem;
+  session.problemId = `em:${topicKey}:${Date.now()}`;
+  session.submitted = null;
+  session.correct = null;
+
+  $("quizBreadcrumb").textContent = `電磁気学 / ${topic.name}`;
+  $("qTag").textContent = topic.name;
+  $("qCounter").textContent = "ランダム生成";
+  $("qBody").textContent = ""; // 直接innerHTMLへ（KaTeXデリミタを含むため）
+  $("qBody").innerHTML = problem.prompt;
+  if (problem.given) { $("qGiven").hidden = false; $("qGiven").innerHTML = problem.given; }
+  else { $("qGiven").hidden = true; }
+  $("qUnitSuffix").textContent = problem.unitLabel || "";
+  $("qInput").value = "";
+  $("qHint").hidden = true;
+  renderMath($("qBody"));
+  renderMath($("qGiven"));
+  show("quiz");
+  $("qInput").focus();
+}
+
+// ============================================================
+//  出題（数学：バンク）
+// ============================================================
+function startBankProblem(unitName) {
+  const candidates = MATH_BANK.filter((p) => p.unit === unitName);
+  const problem = pick(candidates);
+  session.topicKey = unitName;
+  session.problem = problem;
+  session.problemId = `math:${unitName}:${problem.id}`;
+  session.submitted = null;
+  session.correct = null;
+
+  $("quizBreadcrumb").textContent = `東大数学 / ${unitName}`;
+  $("qTag").textContent = problem.unit + "（" + problem.meta + "）";
+  $("qCounter").textContent = "厳選バンク";
+  $("qBody").innerHTML = problem.prompt;
+  if (problem.given) { $("qGiven").hidden = false; $("qGiven").innerHTML = problem.given; }
+  else { $("qGiven").hidden = true; }
+  $("qUnitSuffix").textContent = problem.unitLabel || "";
+  $("qInput").value = "";
+  $("qHint").hidden = true;
+  renderMath($("qBody"));
+  renderMath($("qGiven"));
+  show("quiz");
+  $("qInput").focus();
+}
+
+// ============================================================
+//  解答判定・解説画面
+// ============================================================
+function judgeAnswer() {
+  const raw = $("qInput").value.trim().replace(/,/g, "");
+  const val = parseFloat(raw);
+  const problem = session.problem;
+  const target = problem.answer !== undefined ? problem.answer : problem.answerValue;
+  const tolerance = problem.tolerance !== undefined ? problem.tolerance : Math.max(Math.abs(target) * 0.01, 1e-3);
+  const ok = raw !== "" && Number.isFinite(val) && Math.abs(val - target) <= tolerance;
+  session.submitted = raw;
+  session.correct = ok;
+  return ok;
+}
+
+function renderSolution() {
+  const problem = session.problem;
+  const ok = session.correct;
+
+  $("solBreadcrumb").textContent = $("quizBreadcrumb").textContent;
+
+  const verdict = $("verdictBox");
+  verdict.className = "verdict " + (ok ? "correct" : "wrong");
+  $("verdictIcon").textContent = ok ? "◎" : "✕";
+  $("verdictText").textContent = ok
+    ? `正解！ あなたの解答: ${session.submitted}`
+    : `不正解。あなたの解答: ${session.submitted || "（未回答）"}`;
+
+  const answerDisplay = problem.answerDisplay !== undefined
+    ? problem.answerDisplay
+    : `${fmt(problem.answer, problem.digits || 4)}${problem.unitLabel ? "\\,\\text{" + problem.unitLabel + "}" : ""}`;
+  $("answerLine").innerHTML = `正解: $${answerDisplay}$`;
+
+  const stepsBox = $("stepsBox");
+  stepsBox.innerHTML = "";
+  problem.steps.forEach((s, i) => {
+    const row = document.createElement("div");
+    row.className = "step";
+    row.innerHTML = `<span class="n">${i + 1}</span><span class="txt">${s}</span>`;
+    stepsBox.appendChild(row);
+  });
+
+  renderMath($("answerLine"));
+  renderMath(stepsBox);
+
+  $("xpToast").hidden = true;
+  $("gradeGood").disabled = false;
+  $("gradeBad").disabled = false;
+
+  if (ok) sfx.correct(); else sfx.wrong();
+  show("solution");
+}
+
+// ============================================================
+//  自己採点（できた／できなかった）→ XP・ストリーク・履歴
+// ============================================================
+function selfGrade(good) {
+  $("gradeGood").disabled = true;
+  $("gradeBad").disabled = true;
+  recordAttempt(session.problemId, good);
+  bumpStreakIfNewDay();
+  if (good) {
+    addXp(10);
+    $("xpToast").hidden = false;
+    $("xpToast").textContent = "+10 XP を獲得しました";
+  } else {
+    addXp(2); // 取り組んだこと自体にも少しXPを与える（Duolingo的な「積み上げ」重視）
+    $("xpToast").hidden = false;
+    $("xpToast").textContent = "+2 XP（この問題はまた出題されます）";
+  }
+}
+
+// ============================================================
+//  イベント結線
+// ============================================================
+document.querySelectorAll(".subjectCard").forEach((btn) => {
+  btn.addEventListener("click", () => { sfx.tap(); openUnits(btn.dataset.subject); });
+});
+document.querySelectorAll("[data-back]").forEach((btn) => {
+  btn.addEventListener("click", () => { sfx.tap(); show(btn.dataset.back); });
+});
+$("submitBtn").addEventListener("click", () => {
+  judgeAnswer();
+  renderSolution();
+});
+$("qInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); judgeAnswer(); renderSolution(); }
+});
+$("gradeGood").addEventListener("click", () => selfGrade(true));
+$("gradeBad").addEventListener("click", () => selfGrade(false));
+$("nextInUnitBtn").addEventListener("click", () => {
+  sfx.tap();
+  if (session.subject === "em") startGeneratorProblem(session.topicKey);
+  else startBankProblem(session.topicKey);
+});
+$("toUnitsBtn").addEventListener("click", () => { sfx.tap(); openUnits(session.subject); });
+
+$("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const sysDark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const effectiveCur = cur || (sysDark ? "dark" : "light");
+  const next = effectiveCur === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  state.theme = next;
+  store.set("adv.theme", next);
+});
+$("soundBtn").addEventListener("click", () => {
+  state.sound = !state.sound;
+  store.set("adv.sound", state.sound);
+  $("soundBtn").textContent = state.sound ? "🔔" : "🔕";
+  if (state.sound) sfx.tap();
+});
+if (!state.sound) $("soundBtn").textContent = "🔕";
+
+// ---------- 起動時の初期表示 ----------
+renderHud();
+show("home");
+</script>
+</body>
+</html>

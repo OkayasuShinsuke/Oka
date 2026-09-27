@@ -876,18 +876,59 @@ const centerOf = (el) => { const r = el.getBoundingClientRect(); return [r.left 
 //  おと：よみあげ（Web Speech API）と こうかおん（Web Audio API）
 // ============================================================
 let jaVoice = null;
+// おんせいの 「しつ」を なまえから ざっくり すいてい（たかいほど よさそう）
+function voiceQualityScore(v) {
+  try {
+    const n = (v.name || "").toLowerCase();
+    let score = 0;
+    if (/enhanced|premium|natural|pro\b/.test(n)) score += 5;
+    if (/siri/.test(n)) score += 4;
+    if (/google 日本語|google.*japanese/.test(n)) score += 3;
+    if (v.localService === false) score += 1; // ネット音声は だいたい ひんしつが たかい
+    return score;
+  } catch { return 0; }
+}
 function loadVoice() {
-  const v = speechSynthesis.getVoices();
-  jaVoice = v.find((x) => x.lang === "ja-JP") || v.find((x) => x.lang.startsWith("ja")) || null;
+  try {
+    const v = speechSynthesis.getVoices() || [];
+    const jaVoices = v.filter((x) => x.lang === "ja-JP" || (x.lang || "").startsWith("ja"));
+    if (jaVoices.length === 0) { jaVoice = null; return; }
+    jaVoice = jaVoices.slice().sort((a, b) => voiceQualityScore(b) - voiceQualityScore(a))[0] || jaVoices[0];
+  } catch { jaVoice = jaVoice || null; }
 }
 if ("speechSynthesis" in window) { loadVoice(); speechSynthesis.onvoiceschanged = loadVoice; }
-function speak(text) {
+
+// もーど べつの こわいろ／はやさ の きほんち（ask=きく／praise=ほめる／sorry=なぐさめる）
+const SPEAK_MOODS = {
+  ask: { rate: 0.95, pitch: 1.3 },
+  praise: { rate: 1.02, pitch: 1.42 },
+  sorry: { rate: 0.88, pitch: 1.12 },
+};
+let speakQueue = [];
+let speakTimer = null;
+function stopSpeakQueue() {
+  speakQueue = [];
+  if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
+}
+function speakNextInQueue() {
+  if (speakQueue.length === 0) { speakTimer = null; return; }
+  const { chunk, mood } = speakQueue.shift();
+  const u = new SpeechSynthesisUtterance(chunk);
+  u.lang = "ja-JP"; if (jaVoice) u.voice = jaVoice;
+  u.rate = mood.rate; u.pitch = mood.pitch;
+  u.onend = u.onerror = () => { speakTimer = setTimeout(speakNextInQueue, 150); };
+  speechSynthesis.speak(u);
+}
+function speak(text, mood = "ask") {
   if (!state.sound || !("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "ja-JP"; if (jaVoice) u.voice = jaVoice;
-  u.rate = 0.95; u.pitch = 1.3;
-  speechSynthesis.speak(u);
+  stopSpeakQueue();
+  // にほんごの くとうてん（、。！？）で ちいさく くぎって、まの ある よみあげに する
+  const chunks = String(text).split(/(?<=[、。！？])\s*/).map((s) => s.trim()).filter(Boolean);
+  if (chunks.length === 0) return;
+  const m = SPEAK_MOODS[mood] || SPEAK_MOODS.ask;
+  speakQueue = chunks.map((chunk) => ({ chunk, mood: m }));
+  speakNextInQueue();
 }
 let audio = null;
 function tone(freq, start, dur, type = "sine", vol = 0.18) {
@@ -1052,7 +1093,7 @@ function addLove(n, stageEl) {
     }
     confetti(40);
     sfx.levelup();
-    speak("なかよし レベルが あがったよ！ プレゼント！");
+    speak("なかよし レベルが あがったよ！ プレゼント！", "praise");
     const sticker = pick(STICKERS);
     state.stickers.push(sticker); store.set("mk.stickers", state.stickers);
     renderHud();
@@ -1164,7 +1205,7 @@ function judge(ok, btn) {
     if (game.combo === 3) { stage.classList.add("fever"); sfx.fever(); }
     else if (game.combo === 2) { sfx.comboPing(); }
     banner(stage, fever ? "フィーバー！" : game.combo === 2 ? "2れんぞく！" : pick(["せいかい！", "すごい！", "やったね！"]), fever);
-    speak(game.combo === 3 ? "フィーバー！ " + game.q.praise : game.q.praise);
+    speak(game.combo === 3 ? "フィーバー！ " + game.q.praise : game.q.praise, "praise");
     renderHud();
     setTimeout(() => { game.index++; game.index < ROUND ? nextQuestion() : finish(); }, 1800);
   } else {
@@ -1175,7 +1216,7 @@ function judge(ok, btn) {
     card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake");
     sfx.ng();
     mood(stage, "sad", false);
-    speak("おしいね。 もういちど！");
+    speak("おしいね。 もういちど！", "sorry");
     renderHud();
   }
 }
@@ -1195,7 +1236,7 @@ function finish() {
   setTimeout(() => { banner(stage, perfect ? "パーフェクト！" : "クリア！", perfect); mood(stage, "happy", true); }, 100);
   confetti(perfect ? 90 : 50);
   perfect ? sfx.perfect() : sfx.fanfare();
-  speak(perfect ? "パーフェクト！ すごーい！ シールを どうぞ！" : "よく がんばったね！ シールを どうぞ！");
+  speak(perfect ? "パーフェクト！ すごーい！ シールを どうぞ！" : "よく がんばったね！ シールを どうぞ！", "praise");
 }
 
 function openBook() {
@@ -1390,7 +1431,7 @@ $("soundBtn").addEventListener("click", () => { state.sound = !state.sound; stor
 $("lvEasy").addEventListener("click", () => { state.level = "easy"; store.set("mk.level", "easy"); renderHud(); });
 $("lvHard").addEventListener("click", () => { state.level = "hard"; store.set("mk.level", "hard"); renderHud(); });
 $("repeatBtn").addEventListener("click", () => speak(game.q.say));
-$("backBtn").addEventListener("click", () => { if ("speechSynthesis" in window) speechSynthesis.cancel(); show("home"); });
+$("backBtn").addEventListener("click", () => { if ("speechSynthesis" in window) { speechSynthesis.cancel(); stopSpeakQueue(); } show("home"); });
 $("againBtn").addEventListener("click", () => startGame(game.key));
 $("homeBtn").addEventListener("click", () => show("home"));
 $("bookBtn").addEventListener("click", openBook);
