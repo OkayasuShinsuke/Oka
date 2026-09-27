@@ -203,6 +203,24 @@
   .step .txt { flex: 1; font-size: .96rem; line-height: 1.75; }
   .step .txt .katex-display { margin: .35em 0; }
   .divider { border-top: 1px solid var(--line); margin: 6px 0; }
+
+  /* ===== 図解（SVG）・根拠（なぜ成り立つか）・別解 ===== */
+  .diagramBox { display: flex; justify-content: center; margin: 4px 0 2px; }
+  .diagramBox svg { width: 100%; max-width: 300px; height: auto; display: block; }
+  .whyBox {
+    background: color-mix(in srgb, var(--accent-3) 10%, var(--panel));
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+    font-size: .9rem; line-height: 1.75; color: var(--ink);
+  }
+  .whyBox .lbl, .altBox .lbl {
+    display: block; font-family: var(--mono); font-size: .7rem; letter-spacing: .06em;
+    text-transform: uppercase; margin-bottom: 5px;
+  }
+  .whyBox .lbl { color: var(--accent-3); }
+  .altBox { margin-top: 4px; padding-top: 10px; border-top: 1px dashed var(--line); }
+  .altBox .lbl { color: var(--accent-2); }
+  .term { border-bottom: 1px dotted var(--ink-dim); }
+  .term .def { font-size: .86em; color: var(--ink-dim); }
   .selfGrade { display: flex; flex-direction: column; gap: 10px; }
   .selfGrade .prompt { font-size: .9rem; color: var(--ink-dim); }
   .selfGradeBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -301,8 +319,14 @@
           <span id="verdictText"></span>
         </div>
         <p class="answerLine" id="answerLine" style="margin-top:14px;"></p>
+        <div class="diagramBox" id="diagramBox" hidden></div>
+        <div class="whyBox" id="whyBox" hidden></div>
         <div class="divider"></div>
         <div class="steps" id="stepsBox"></div>
+        <div class="altBox" id="altBox" hidden>
+          <span class="lbl">別解</span>
+          <div class="steps" id="altStepsBox"></div>
+        </div>
       </div>
 
       <!-- ===== 自己採点 ===== -->
@@ -445,6 +469,195 @@ function renderMath(container) {
 }
 
 // ============================================================
+//  用語の一言定義（初出時にそっと添える）
+// ============================================================
+function term(word, def) {
+  return `<span class="term">${word}<span class="def">（${def}）</span></span>`;
+}
+
+// ============================================================
+//  図解：軽量インラインSVGビルダー（テーマのCSSトークンを継承するので
+//  ライト/ダーク両方で自然に見える。外部画像は使わない）
+// ============================================================
+function svgWrap(inner, viewBox, label) {
+  return `<svg viewBox="${viewBox}" role="img" aria-label="${label || ""}">${inner}</svg>`;
+}
+
+function resistorSymbol(cx, cy, w = 44, h = 14, rot = 0) {
+  const n = 6, seg = w / n;
+  const pts = [[cx - w / 2, cy]];
+  for (let i = 1; i < n; i++) pts.push([cx - w / 2 + seg * i, cy + (i % 2 === 0 ? h / 2 : -h / 2)]);
+  pts.push([cx + w / 2, cy]);
+  const d = "M " + pts.map((p) => p.join(",")).join(" L ");
+  const g = rot ? ` transform="rotate(${rot} ${cx} ${cy})"` : "";
+  return `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"${g}/>`;
+}
+
+function capacitorSymbol(cx, cy, rot = 0) {
+  const g = rot ? ` transform="rotate(${rot} ${cx} ${cy})"` : "";
+  return `<g${g} stroke="var(--accent-2)" stroke-width="2.5">
+    <line x1="${cx - 8}" y1="${cy - 10}" x2="${cx - 8}" y2="${cy + 10}"/>
+    <line x1="${cx + 8}" y1="${cy - 10}" x2="${cx + 8}" y2="${cy + 10}"/>
+  </g>`;
+}
+
+// クーロンの法則：2つの点電荷と反発力の矢印
+function svgCoulomb(q1Label, q2Label) {
+  return svgWrap(`
+    <defs><marker id="arrowC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>
+    <line x1="20" y1="60" x2="180" y2="60" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 4"/>
+    <circle cx="55" cy="60" r="16" fill="var(--accent-2)"/>
+    <text x="55" y="65" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">${q1Label}</text>
+    <circle cx="145" cy="60" r="16" fill="var(--accent-3)"/>
+    <text x="145" y="65" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">${q2Label}</text>
+    <path d="M74 60 h18" stroke="var(--accent)" stroke-width="3" marker-end="url(#arrowC)"/>
+    <path d="M126 60 h-18" stroke="var(--accent)" stroke-width="3" marker-end="url(#arrowC)"/>
+    <path d="M55 78 q45 22 90 0" fill="none" stroke="var(--ink-dim)" stroke-width="1" stroke-dasharray="2 3"/>
+    <text x="100" y="40" text-anchor="middle" font-size="11" fill="var(--ink-dim)">r</text>
+    <text x="100" y="108" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">同符号なら反発。離れるほど力は弱まる</text>
+  `, "0 0 200 128", "クーロン力の模式図");
+}
+
+// オームの法則：直列／並列の回路図
+function svgCircuit(series, r1Label, r2Label) {
+  const battery = `
+    <line x1="30" y1="40" x2="30" y2="58" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="20" y1="58" x2="40" y2="58" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="24" y1="66" x2="36" y2="66" stroke="var(--ink)" stroke-width="4"/>
+    <line x1="30" y1="66" x2="30" y2="100" stroke="var(--ink)" stroke-width="2"/>
+    <text x="8" y="76" font-size="10" fill="var(--ink-dim)">V</text>`;
+  if (series) {
+    return svgWrap(`
+      ${battery}
+      <line x1="30" y1="40" x2="190" y2="40" stroke="var(--ink)" stroke-width="2"/>
+      <line x1="190" y1="40" x2="190" y2="100" stroke="var(--ink)" stroke-width="2"/>
+      <line x1="190" y1="100" x2="30" y2="100" stroke="var(--ink)" stroke-width="2"/>
+      ${resistorSymbol(85, 40)}
+      ${resistorSymbol(150, 40)}
+      <text x="85" y="26" text-anchor="middle" font-size="11" fill="var(--accent)">${r1Label}</text>
+      <text x="150" y="26" text-anchor="middle" font-size="11" fill="var(--accent)">${r2Label}</text>
+      <text x="110" y="120" text-anchor="middle" font-size="10" fill="var(--ink-dim)">直列：同じ電流Iが両方を流れる</text>
+    `, "0 0 220 135", "直列回路の模式図");
+  }
+  return svgWrap(`
+    ${battery}
+    <line x1="30" y1="40" x2="190" y2="40" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="30" y1="100" x2="190" y2="100" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="90" y1="40" x2="90" y2="100" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="150" y1="40" x2="150" y2="100" stroke="var(--ink)" stroke-width="2"/>
+    ${resistorSymbol(90, 70, 44, 14, 90)}
+    ${resistorSymbol(150, 70, 44, 14, 90)}
+    <text x="90" y="18" text-anchor="middle" font-size="11" fill="var(--accent)">${r1Label}</text>
+    <text x="150" y="18" text-anchor="middle" font-size="11" fill="var(--accent)">${r2Label}</text>
+    <text x="110" y="120" text-anchor="middle" font-size="10" fill="var(--ink-dim)">並列：同じ電圧Vが両方にかかる</text>
+  `, "0 0 220 135", "並列回路の模式図");
+}
+
+// コンデンサの合成容量：直列／並列の配置図
+function svgCapacitorCircuit(series, c1Label, c2Label) {
+  if (series) {
+    return svgWrap(`
+      <line x1="15" y1="60" x2="75" y2="60" stroke="var(--ink)" stroke-width="2"/>
+      ${capacitorSymbol(90, 60)}
+      <line x1="105" y1="60" x2="135" y2="60" stroke="var(--ink)" stroke-width="2"/>
+      ${capacitorSymbol(150, 60)}
+      <line x1="165" y1="60" x2="205" y2="60" stroke="var(--ink)" stroke-width="2"/>
+      <text x="90" y="42" text-anchor="middle" font-size="11" fill="var(--accent-2)">${c1Label}</text>
+      <text x="150" y="42" text-anchor="middle" font-size="11" fill="var(--accent-2)">${c2Label}</text>
+      <text x="110" y="90" text-anchor="middle" font-size="10" fill="var(--ink-dim)">直列：各コンデンサに同じ電荷Qが蓄えられる</text>
+    `, "0 0 220 100", "コンデンサ直列の模式図");
+  }
+  return svgWrap(`
+    <line x1="30" y1="30" x2="190" y2="30" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="30" y1="90" x2="190" y2="90" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="90" y1="30" x2="90" y2="90" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="150" y1="30" x2="150" y2="90" stroke="var(--ink)" stroke-width="2"/>
+    ${capacitorSymbol(90, 60, 90)}
+    ${capacitorSymbol(150, 60, 90)}
+    <text x="90" y="18" text-anchor="middle" font-size="11" fill="var(--accent-2)">${c1Label}</text>
+    <text x="150" y="18" text-anchor="middle" font-size="11" fill="var(--accent-2)">${c2Label}</text>
+    <text x="110" y="105" text-anchor="middle" font-size="10" fill="var(--ink-dim)">並列：両方に同じ電圧Vがかかる</text>
+  `, "0 0 220 118", "コンデンサ並列の模式図");
+}
+
+// 微積分：実際の関数・区間からグラフと面積の塗りを計算して描く
+function svgAreaUnderCurve(f, a, b) {
+  const padX = (b - a) * 0.15;
+  const xMin = a - padX, xMax = b + padX;
+  const N = 60;
+  const pts = [];
+  let ymin = Infinity, ymax = -Infinity;
+  for (let i = 0; i <= N; i++) {
+    const x = xMin + (xMax - xMin) * i / N;
+    const y = f(x);
+    pts.push([x, y]);
+    if (y < ymin) ymin = y;
+    if (y > ymax) ymax = y;
+  }
+  ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0);
+  const W = 260, H = 150, padL = 18, padR = 12, padT = 16, padB = 16;
+  const sx = (x) => padL + (x - xMin) / (xMax - xMin) * (W - padL - padR);
+  const sy = (y) => H - padB - (y - ymin) / (ymax - ymin) * (H - padT - padB);
+  const curve = pts.map(([x, y], i) => `${i === 0 ? "M" : "L"} ${sx(x).toFixed(1)} ${sy(y).toFixed(1)}`).join(" ");
+  const shadePts = pts.filter(([x]) => x >= a - 1e-9 && x <= b + 1e-9);
+  const shadePath = `M ${sx(a).toFixed(1)} ${sy(0).toFixed(1)} ` +
+    shadePts.map(([x, y]) => `L ${sx(x).toFixed(1)} ${sy(y).toFixed(1)}`).join(" ") +
+    ` L ${sx(b).toFixed(1)} ${sy(0).toFixed(1)} Z`;
+  const axisY = sy(0);
+  return svgWrap(`
+    <line x1="${padL}" y1="${axisY.toFixed(1)}" x2="${W - padR}" y2="${axisY.toFixed(1)}" stroke="var(--ink-dim)" stroke-width="1"/>
+    <path d="${shadePath}" fill="var(--accent-2)" fill-opacity="0.3" stroke="none"/>
+    <path d="${curve}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    <text x="${sx(a).toFixed(1)}" y="${(axisY + 14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--ink-dim)">${a}</text>
+    <text x="${sx(b).toFixed(1)}" y="${(axisY + 14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--ink-dim)">${b}</text>
+  `, `0 0 ${W} ${H}`, "面積のグラフ");
+}
+
+// 確率：6x6の格子で「条件付き確率」を視覚化（濃淡＝事象A・A∩B）
+function svgDiceGrid() {
+  const cell = 22, ox = 34, oy = 12;
+  let cells = "";
+  for (let a1 = 1; a1 <= 6; a1++) {
+    for (let b1 = 1; b1 <= 6; b1++) {
+      const x = ox + (b1 - 1) * cell, y = oy + (a1 - 1) * cell;
+      const inA = a1 + b1 === 8;
+      const inAB = inA && (a1 === 2 || b1 === 2);
+      const fill = inAB ? "var(--accent)" : inA ? "color-mix(in srgb, var(--accent) 35%, var(--panel-2))" : "var(--panel-2)";
+      cells += `<rect x="${x}" y="${y}" width="${cell - 2}" height="${cell - 2}" rx="3" fill="${fill}" stroke="var(--line)" stroke-width="0.5"/>`;
+    }
+  }
+  let labels = "";
+  for (let i = 1; i <= 6; i++) {
+    labels += `<text x="${ox - 12}" y="${oy + (i - 1) * cell + 14}" font-size="9" fill="var(--ink-dim)" text-anchor="middle">${i}</text>`;
+    labels += `<text x="${ox + (i - 1) * cell + 10}" y="${oy - 4}" font-size="9" fill="var(--ink-dim)" text-anchor="middle">${i}</text>`;
+  }
+  return svgWrap(`
+    ${cells}${labels}
+    <text x="${ox + 3 * cell}" y="${oy + 6 * cell + 16}" text-anchor="middle" font-size="8.5" fill="var(--ink-dim)">濃＝和が8(A・5通り)</text>
+    <text x="${ox + 3 * cell}" y="${oy + 6 * cell + 28}" text-anchor="middle" font-size="8.5" fill="var(--ink-dim)">最濃＝Aかつ2を含む(2通り)</text>
+  `, "0 0 200 190", "条件付き確率の格子図");
+}
+
+// 数列：最初の数項を棒グラフで
+function svgSequenceBars(terms) {
+  const W = 220, H = 120, padL = 24, padB = 20, padT = 14;
+  const maxV = Math.max(...terms);
+  const bw = (W - padL - 10) / terms.length;
+  const bars = terms.map((v, i) => {
+    const h = (v / maxV) * (H - padT - padB);
+    const x = padL + i * bw + 4, y = H - padB - h;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw - 8).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--accent-3)"/>
+      <text x="${(x + (bw - 8) / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--ink-dim)">${v}</text>
+      <text x="${(x + (bw - 8) / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--ink-dim)">a${i + 1}</text>`;
+  }).join("");
+  return svgWrap(`
+    <line x1="${padL}" y1="${H - padB}" x2="${W - 6}" y2="${H - padB}" stroke="var(--ink-dim)" stroke-width="1"/>
+    ${bars}
+  `, `0 0 ${W} ${H}`, "数列の項の棒グラフ");
+}
+
+// ============================================================
 //  電磁気学：ジェネレーター方式
 //  各トピックは { param生成 → 同じ式から出題文・答え・途中式を作る } 関数を持つ。
 //  「出題に使う式」と「採点に使う式」が絶対にズレないよう、
@@ -471,6 +684,7 @@ const EM_TOPICS = {
         answer: F,
         unitLabel: "N",
         digits: 3,
+        why: `クーロン力が距離の2乗に反比例するのは、点電荷から出る${term("電場", "電荷の周りの空間にできる、他の電荷に力を及ぼすはたらき")}の管（電場線）が球面状に広がるため。半径 $r$ の球の表面積は $4\\pi r^2$ なので、同じ本数の管がより広い面積に広がるほど密度（＝場の強さ）は $1/r^2$ で薄くなる。`,
         steps: [
           `クーロンの法則は $F = k\\dfrac{|q_1 q_2|}{r^2}$ である。`,
           `単位をSI単位に直す：$q_1 = ${q1uC}\\,\\mu\\text{C} = ${q1.toExponential(2)}\\,\\text{C}$、` +
@@ -479,6 +693,12 @@ const EM_TOPICS = {
           `$F = 8.99\\times10^{9} \\times \\dfrac{${(q1 * q2).toExponential(3)}}{${(r * r).toExponential(3)}}$`,
           `よって $F \\approx ${fmt(F, 3)}\\,\\text{N}$。`,
         ],
+        altSteps: [
+          `別解（電場を経由して求める）：まず $q_1$ が距離 $r$ の位置につくる電場の大きさ $E_1 = k\\dfrac{|q_1|}{r^2}$ を求める。`,
+          `代入すると $E_1 = 8.99\\times10^{9} \\times \\dfrac{${q1.toExponential(2)}}{${(r * r).toExponential(3)}} \\approx ${fmt((K_COULOMB * q1) / (r * r), 3)}\\,\\text{N/C}$。`,
+          `電場の中に置かれた電荷 $q_2$ が受ける力は $F = q_2 E_1$ なので、$F \\approx ${q2.toExponential(2)} \\times ${fmt((K_COULOMB * q1) / (r * r), 3)} \\approx ${fmt(F, 3)}\\,\\text{N}$ となり、直接計算と一致する。`,
+        ],
+        diagram: svgCoulomb("q₁", "q₂").replace("同符号なら反発。離れるほど力は弱まる", `q₁=${q1uC}µC, q₂=${q2uC}µC, r=${rCm}cm`),
       };
     },
   },
@@ -504,6 +724,9 @@ const EM_TOPICS = {
         answer: I,
         unitLabel: "A",
         digits: 3,
+        why: series
+          ? `直列接続では同じ${term("電流", "回路を流れる電気の量。単位時間あたりに流れる電荷の量")}が $R_1$、$R_2$ を順に流れ、それぞれの両端の電圧は $V_1=IR_1$、$V_2=IR_2$ になる。電源電圧はその和 $V=I(R_1+R_2)$ なので、合成抵抗は単純な和になる。`
+          : `並列接続では $R_1$、$R_2$ の両端に同じ電圧 $V$ がかかり、流れる電流はそれぞれ $I_1=\\dfrac{V}{R_1}$、$I_2=\\dfrac{V}{R_2}$。全体の電流はその和 $I=V\\left(\\dfrac{1}{R_1}+\\dfrac{1}{R_2}\\right)$ になるので、抵抗の逆数（${term("コンダクタンス", "抵抗の逆数。値が大きいほど電流が流れやすいことを表す量")}）どうしが単純な和になる。`,
         steps: [
           `まず合成抵抗 $R_{12}$ を求める。${connectLabel}接続なので $${combineFormula}$ が成り立つ。`,
           series
@@ -514,6 +737,17 @@ const EM_TOPICS = {
           `代入すると $I = \\dfrac{${V}}{${fmt(Rtotal, 4)}}$`,
           `よって $I \\approx ${fmt(I, 3)}\\,\\text{A}$。`,
         ],
+        altSteps: series
+          ? [
+              `別解（各抵抗の電圧降下を確かめる）：電流 $I \\approx ${fmt(I, 3)}\\,\\text{A}$ が両方の抵抗を流れるので、$V_1=IR_1 \\approx ${fmt(I * R1, 3)}\\,\\text{V}$、$V_2=IR_2 \\approx ${fmt(I * R2, 3)}\\,\\text{V}$。`,
+              `キルヒホッフの電圧法則より $V_1+V_2 \\approx ${fmt(I * R1 + I * R2, 3)}\\,\\text{V}$ となり、電源電圧 $V=${V}\\,\\text{V}$ と一致する（検算）。`,
+            ]
+          : [
+              `別解（コンダクタンスで求める）：$G_1=\\dfrac{1}{R_1}=${fmt(1 / R1, 4)}\\,\\text{S}$、$G_2=\\dfrac{1}{R_2}=${fmt(1 / R2, 4)}\\,\\text{S}$。`,
+              `並列では電流の通り道が増えるだけなので、コンダクタンスは単純に加算できる：$G_{12}=G_1+G_2 \\approx ${fmt(1 / R1 + 1 / R2, 4)}\\,\\text{S}$。`,
+              `よって $R_{12}=\\dfrac{1}{G_{12}} \\approx ${fmt(1 / (1 / R1 + 1 / R2), 4)}\\,\\Omega$（本解と一致）、$I=\\dfrac{V}{R_{12}} \\approx ${fmt(I, 3)}\\,\\text{A}$。`,
+            ],
+        diagram: svgCircuit(series, "R₁", "R₂"),
       };
     },
   },
@@ -537,6 +771,9 @@ const EM_TOPICS = {
         answer: Ctotal,
         unitLabel: "µF",
         digits: 4,
+        why: series
+          ? `直列に並んだコンデンサでは、間の導体が孤立しているため${term("電荷", "物体が帯びている電気の量")}保存則により両方のコンデンサに同じ電荷 $Q$ が蓄えられる。電圧の和は $V=V_1+V_2=\\dfrac{Q}{C_1}+\\dfrac{Q}{C_2}$ となるので、抵抗の並列と同じ形の式になる（抵抗とは直列・並列が入れ替わる点に注意）。`
+          : `並列に並んだコンデンサは両方とも同じ電圧 $V$ を共有する。蓄えられる電荷はそれぞれ $Q_1=C_1V$、$Q_2=C_2V$ で、全体の電荷は $Q_1+Q_2=(C_1+C_2)V$ となるので、${term("静電容量", "コンデンサが電圧1Vあたりに蓄えられる電荷の量")}は単純に足し算になる。`,
         steps: [
           `${connectLabel}接続の合成容量は $${combineFormula}$ で与えられる` +
             `（コンデンサは抵抗と直列・並列の式が入れ替わることに注意）。`,
@@ -546,6 +783,18 @@ const EM_TOPICS = {
             : `代入すると $C_{12} = ${C1} + ${C2} = ${Ctotal}\\,\\mu\\text{F}$。`,
           `よって合成容量は $C_{12} \\approx ${fmt(Ctotal, 4)}\\,\\mu\\text{F}$。`,
         ],
+        altSteps: series
+          ? [
+              `別解（電荷 $Q=1\\,\\mu\\text{C}$ と仮定して確かめる）：直列では両方に同じ電荷が乗るので、$Q=1\\,\\mu\\text{C}$ とすると $V_1=\\dfrac{Q}{C_1}=\\dfrac{1}{${C1}}\\,\\text{V}$、$V_2=\\dfrac{Q}{C_2}=\\dfrac{1}{${C2}}\\,\\text{V}$。`,
+              `合計電圧は $V=V_1+V_2 \\approx ${fmt(1 / C1 + 1 / C2, 4)}\\,\\text{V}$。`,
+              `合成容量は $C_{12}=\\dfrac{Q}{V} \\approx ${fmt(1 / (1 / C1 + 1 / C2), 4)}\\,\\mu\\text{F}$（本解と一致。$Q$の値には依らない）。`,
+            ]
+          : [
+              `別解（電圧 $V=1\\,\\text{V}$ と仮定して確かめる）：並列では両方に同じ電圧がかかるので、$V=1\\,\\text{V}$ とすると $Q_1=C_1V=${C1}\\,\\mu\\text{C}$、$Q_2=C_2V=${C2}\\,\\mu\\text{C}$。`,
+              `全体の電荷は $Q=Q_1+Q_2=${C1 + C2}\\,\\mu\\text{C}$。`,
+              `合成容量は $C_{12}=\\dfrac{Q}{V}=${C1 + C2}\\,\\mu\\text{F}$（本解と一致。$V$の値には依らない）。`,
+            ],
+        diagram: svgCapacitorCircuit(series, "C₁", "C₂"),
       };
     },
   },
@@ -573,6 +822,7 @@ const MATH_BANK = [
     answerValue: 27 / 4,
     tolerance: 1e-6,
     unitLabel: "",
+    why: `${term("定積分", "関数とx軸の間の面積を、正負も含めて足し合わせた値")} $\\int_a^b f(x)\\,dx$ は、区間を細い長方形（幅 $\\Delta x$、高さ $f(x)$）に分けて足し合わせる${term("リーマン和", "短冊状の長方形の面積を足し合わせて曲線の下の面積を近似する考え方")}の、幅を0に近づけた極限であり、その短冊の集まりがちょうど曲線と$x$軸で挟まれた面積そのものになる。`,
     steps: [
       `まず $f(x)$ を因数分解する。$f(1) = 1 - 3 + 2 = 0$ なので $x=1$ は解の一つ。組立除法により` +
         `$f(x) = (x-1)(x^2+x-2) = (x-1)(x-1)(x+2) = (x-1)^2(x+2)$。`,
@@ -583,6 +833,14 @@ const MATH_BANK = [
       `$x=-2$ を代入：$\\dfrac{16}{4} - \\dfrac{3 \\cdot 4}{2} + 2\\cdot(-2) = 4 - 6 - 4 = -6$`,
       `したがって $S = \\dfrac{3}{4} - (-6) = \\dfrac{3}{4} + 6 = \\dfrac{27}{4}$。`,
     ],
+    // 検算(別解): x=t+1 とおくと f(x)=(x-1)^2(x+2)=t^2(t+3)=t^3+3t^2。
+    // ∫_{-3}^{0}(t^3+3t^2)dt = [t^4/4+t^3]_{-3}^{0} = 0-(81/4-27) = 0-(-27/4) = 27/4。一致。
+    altSteps: [
+      `別解（$x=t+1$ と置換し、二重根をずらす）：$x-1=t$ とおくと $x=t+1$。積分区間は $x=-2\\to t=-3$、$x=1\\to t=0$ に変わる。`,
+      `$f(x)=(x-1)^2(x+2)=t^2(t+3)=t^3+3t^2$ となり、定数項・1次項が消えて簡単な式になる。`,
+      `$S=\\displaystyle\\int_{-3}^{0}(t^3+3t^2)\\,dt=\\left[\\dfrac{t^4}{4}+t^3\\right]_{-3}^{0}=0-\\left(\\dfrac{81}{4}-27\\right)=\\dfrac{27}{4}$（本解と一致）。`,
+    ],
+    diagram: svgAreaUnderCurve((x) => x ** 3 - 3 * x + 2, -2, 1),
   },
   {
     id: "math-prob-1",
@@ -597,6 +855,7 @@ const MATH_BANK = [
     answerValue: 2 / 5,
     tolerance: 1e-6,
     unitLabel: "",
+    why: `${term("条件付き確率", "ある事象が起きたという条件のもとで、別の事象が起こる確率")}とは、全体の${term("標本空間", "起こりうる結果すべての集合")}を「条件に合う結果だけ」に絞り込んだ、その狭い世界の中だけで考える確率のこと。`,
     steps: [
       `事象 $A$：「目の和が $8$」、事象 $B$：「少なくとも一方の目が $2$」とし，求めるのは $P(B\\mid A)$。`,
       `$A$ が起こる $(a,b)$ の組をすべて挙げる：$a+b=8$ を満たす $1\\le a,b\\le 6$ の組は` +
@@ -604,6 +863,12 @@ const MATH_BANK = [
       `このうち少なくとも一方が $2$ であるものは $(2,6)$ と $(6,2)$ の $2$ 通り。よって $n(A\\cap B) = 2$。`,
       `条件付き確率は $P(B\\mid A) = \\dfrac{n(A\\cap B)}{n(A)} = \\dfrac{2}{5}$。`,
     ],
+    // 検算(別解): P(A)=5/36, P(A∩B)=2/36=1/18。 (1/18)/(5/36) = (1/18)*(36/5) = 2/5。一致。
+    altSteps: [
+      `別解（${term("ベイズの定理", "条件付き確率を P(A∩B)/P(A) の形で書き直す基本公式")}の形で書く）：全事象は $6\\times6=36$ 通りなので $P(A)=\\dfrac{5}{36}$、$P(A\\cap B)=\\dfrac{2}{36}=\\dfrac{1}{18}$。`,
+      `$P(B\\mid A)=\\dfrac{P(A\\cap B)}{P(A)}=\\dfrac{1/18}{5/36}=\\dfrac{1}{18}\\times\\dfrac{36}{5}=\\dfrac{2}{5}$（本解と一致）。`,
+    ],
+    diagram: svgDiceGrid(),
   },
   {
     id: "math-seq-1",
@@ -618,6 +883,7 @@ const MATH_BANK = [
     answerValue: 31,
     tolerance: 1e-9,
     unitLabel: "",
+    why: `${term("漸化式", "前の項から次の項を計算するための関係式")}に定数を足して $a_{n+1}+c=k(a_n+c)$ の形に変形できれば、$c$ を除いた部分がそのまま${term("公比", "等比数列で、隣り合う項の比。前の項に掛けると次の項になる数")} $k$ の等比数列になる。この $c$ は「動かない点（不動点）」$c=2c+1$ を解くことで見つかる。`,
     steps: [
       `漸化式 $a_{n+1} = 2a_n + 1$ の両辺に $1$ を加えると $a_{n+1} + 1 = 2a_n + 2 = 2(a_n + 1)$。`,
       `$b_n = a_n + 1$ とおくと $b_{n+1} = 2 b_n$ となり，$\\{b_n\\}$ は初項 $b_1 = a_1 + 1 = 2$，公比 $2$ の等比数列。`,
@@ -625,6 +891,14 @@ const MATH_BANK = [
       `検算：$a_1 = 2^1 - 1 = 1$（条件と一致），$a_2 = 2a_1+1 = 3 = 2^2-1$（一致）。`,
       `$a_5 = 2^5 - 1 = 32 - 1 = 31$。`,
     ],
+    // 検算(別解・帰納法): base n=1: 2^1-1=1=a_1。 帰納段階: a_k=2^k-1 ⇒ a_{k+1}=2(2^k-1)+1=2^{k+1}-1。OK。
+    altSteps: [
+      `別解（数学的帰納法で検証する）：$a_n=2^n-1$ が正しいことを帰納法で示す。`,
+      `【base】$n=1$ のとき $2^1-1=1=a_1$ で成立。`,
+      `【帰納段階】$a_k=2^k-1$ と仮定すると、$a_{k+1}=2a_k+1=2(2^k-1)+1=2^{k+1}-2+1=2^{k+1}-1$ となり、$n=k+1$ でも成立。`,
+      `よってすべての $n$ で $a_n=2^n-1$ が成り立つ（本解と一致）。`,
+    ],
+    diagram: svgSequenceBars([1, 3, 7, 15, 31]),
   },
 ];
 
@@ -799,8 +1073,37 @@ function renderSolution() {
     stepsBox.appendChild(row);
   });
 
+  // ===== 図解（SVG） =====
+  const diagramBox = $("diagramBox");
+  if (problem.diagram) { diagramBox.hidden = false; diagramBox.innerHTML = problem.diagram; }
+  else { diagramBox.hidden = true; diagramBox.innerHTML = ""; }
+
+  // ===== 公式の根拠（なぜ成り立つか） =====
+  const whyBox = $("whyBox");
+  if (problem.why) { whyBox.hidden = false; whyBox.innerHTML = `<span class="lbl">なぜ成り立つか</span>${problem.why}`; }
+  else { whyBox.hidden = true; whyBox.innerHTML = ""; }
+
+  // ===== 別解 =====
+  const altBox = $("altBox");
+  const altStepsBox = $("altStepsBox");
+  if (problem.altSteps && problem.altSteps.length) {
+    altBox.hidden = false;
+    altStepsBox.innerHTML = "";
+    problem.altSteps.forEach((s, i) => {
+      const row = document.createElement("div");
+      row.className = "step";
+      row.innerHTML = `<span class="n">${i + 1}</span><span class="txt">${s}</span>`;
+      altStepsBox.appendChild(row);
+    });
+  } else {
+    altBox.hidden = true;
+    altStepsBox.innerHTML = "";
+  }
+
   renderMath($("answerLine"));
+  renderMath($("whyBox"));
   renderMath(stepsBox);
+  renderMath(altStepsBox);
 
   $("xpToast").hidden = true;
   $("gradeGood").disabled = false;
