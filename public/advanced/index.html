@@ -581,6 +581,94 @@ function svgCapacitorCircuit(series, c1Label, c2Label) {
   `, "0 0 220 118", "コンデンサ並列の模式図");
 }
 
+// 点電荷の電場：放射状の矢印と、観測点Pでの電場ベクトル
+function svgPointField(qLabel, noteText) {
+  return svgWrap(`
+    <defs><marker id="arrowEf" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>
+    <circle cx="60" cy="64" r="16" fill="var(--accent-2)"/>
+    <text x="60" y="69" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">${qLabel}</text>
+    <path d="M76 64 L150 64" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#arrowEf)"/>
+    <path d="M70 50 L112 18" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arrowEf)" opacity="0.55"/>
+    <path d="M70 78 L112 110" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arrowEf)" opacity="0.55"/>
+    <path d="M48 50 L18 22" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arrowEf)" opacity="0.4"/>
+    <path d="M48 78 L18 106" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arrowEf)" opacity="0.4"/>
+    <circle cx="150" cy="64" r="3" fill="var(--accent-3)"/>
+    <text x="150" y="50" text-anchor="middle" font-size="10" fill="var(--accent-3)">P</text>
+    <text x="110" y="122" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">${noteText}</text>
+  `, "0 0 200 132", "点電荷の電場の模式図");
+}
+
+// 点電荷の電位：等電位線（同心円）と観測半径r
+function svgEquipotential(qLabel, noteText) {
+  return svgWrap(`
+    <circle cx="100" cy="60" r="46" fill="none" stroke="var(--ink-dim)" stroke-width="1" stroke-dasharray="2 3"/>
+    <circle cx="100" cy="60" r="30" fill="none" stroke="var(--ink-dim)" stroke-width="1" stroke-dasharray="2 3"/>
+    <circle cx="100" cy="60" r="38" fill="none" stroke="var(--accent-3)" stroke-width="2" stroke-dasharray="4 3"/>
+    <line x1="100" y1="60" x2="138" y2="60" stroke="var(--accent-3)" stroke-width="1.4"/>
+    <text x="119" y="53" text-anchor="middle" font-size="10" fill="var(--accent-3)">r</text>
+    <circle cx="100" cy="60" r="16" fill="var(--accent-2)"/>
+    <text x="100" y="65" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">${qLabel}</text>
+    <text x="100" y="118" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">${noteText}（同心円＝等電位線）</text>
+  `, "0 0 200 128", "等電位線の模式図");
+}
+
+// キルヒホッフ則：2つの電池(内部抵抗つき)がR3に並列に電流を送り込む回路
+function svgKirchhoffCircuit(b1Label, b2Label, r3Label) {
+  const branch = (cx, withBattery, label) => {
+    const top = `<line x1="${cx}" y1="26" x2="${cx}" y2="${withBattery ? 40 : 50}" stroke="var(--ink)" stroke-width="2"/>`;
+    const batt = withBattery ? `
+      <line x1="${cx - 9}" y1="40" x2="${cx + 9}" y2="40" stroke="var(--ink)" stroke-width="2"/>
+      <line x1="${cx - 5}" y1="46" x2="${cx + 5}" y2="46" stroke="var(--ink)" stroke-width="4"/>
+      <line x1="${cx}" y1="46" x2="${cx}" y2="56" stroke="var(--ink)" stroke-width="2"/>` : "";
+    const midY = withBattery ? 56 : 50;
+    const res = resistorSymbol(cx, midY + 20, 30, 11, 90);
+    const bottom = `<line x1="${cx}" y1="${midY + 34}" x2="${cx}" y2="112" stroke="var(--ink)" stroke-width="2"/>`;
+    const mid = `<line x1="${cx}" y1="${midY}" x2="${cx}" y2="${midY + 6}" stroke="var(--ink)" stroke-width="2"/>`;
+    return `${top}${batt}${mid}${res}${bottom}<text x="${cx}" y="14" text-anchor="middle" font-size="10" fill="var(--accent)">${label}</text>`;
+  };
+  return svgWrap(`
+    <defs><marker id="arrowK" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent-3)"/></marker></defs>
+    <line x1="20" y1="26" x2="200" y2="26" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="20" y1="112" x2="200" y2="112" stroke="var(--ink)" stroke-width="2"/>
+    ${branch(55, true, b1Label)}
+    ${branch(110, true, b2Label)}
+    ${branch(165, false, r3Label)}
+    <path d="M70 26 h20" stroke="var(--accent-3)" stroke-width="2" marker-end="url(#arrowK)"/>
+    <path d="M125 26 h20" stroke="var(--accent-3)" stroke-width="2" marker-end="url(#arrowK)"/>
+    <text x="60" y="122" text-anchor="middle" font-size="9" fill="var(--ink-dim)">A（上の配線）</text>
+    <text x="60" y="8" text-anchor="middle" font-size="9" fill="var(--ink-dim)"></text>
+    <text x="110" y="126" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">I₁+I₂=I₃（電流則）</text>
+  `, "0 0 220 138", "キルヒホッフ則の回路図");
+}
+
+// 電磁誘導：磁場(●=手前向き)の境界をまたぐコイルと、レンツの法則による誘導電流の向き
+function svgInductionLoop(BLabel, LLabel, vLabel, turns) {
+  let dots = "";
+  for (let gy = 22; gy <= 96; gy += 18) {
+    for (let gx = 26; gx <= 92; gx += 18) {
+      dots += `<circle cx="${gx}" cy="${gy}" r="1.6" fill="var(--accent-3)"/>`;
+    }
+  }
+  return svgWrap(`
+    <defs><marker id="arrowI" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>
+    ${dots}
+    <line x1="100" y1="10" x2="100" y2="110" stroke="var(--ink-dim)" stroke-width="1" stroke-dasharray="3 3"/>
+    <rect x="70" y="30" width="90" height="60" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    <path d="M160 46 L160 30" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#arrowI)"/>
+    <path d="M130 30 L100 30" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#arrowI)"/>
+    <path d="M70 60 L70 76" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#arrowI)"/>
+    <path d="M100 90 L130 90" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#arrowI)"/>
+    <path d="M162 55 h20" stroke="var(--ink)" stroke-width="2" marker-end="url(#arrowI)"/>
+    <text x="184" y="50" font-size="10" fill="var(--ink-dim)">v</text>
+    <text x="45" y="18" font-size="9.5" fill="var(--accent-3)">B（●=手前向き）</text>
+    <text x="115" y="18" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">${turns > 1 ? turns + "回巻き" : ""}</text>
+    <text x="115" y="124" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">B=${BLabel}T, L=${LLabel}cm, v=${vLabel}m/s（誘導電流は反時計回り）</text>
+  `, "0 0 220 134", "電磁誘導：磁場から引き出されるコイルの模式図");
+}
+
 // 微積分：実際の関数・区間からグラフと面積の塗りを計算して描く
 function svgAreaUnderCurve(f, a, b) {
   const padX = (b - a) * 0.15;
@@ -795,6 +883,157 @@ const EM_TOPICS = {
               `合成容量は $C_{12}=\\dfrac{Q}{V}=${C1 + C2}\\,\\mu\\text{F}$（本解と一致。$V$の値には依らない）。`,
             ],
         diagram: svgCapacitorCircuit(series, "C₁", "C₂"),
+      };
+    },
+  },
+  efield: {
+    name: "電場（点電荷）",
+    meta: "電場 / 高校物理",
+    unitLabel: "N/C",
+    gen() {
+      const qMuC = rand(1, 9);
+      const rCm = rand(10, 60);
+      const q = qMuC * 1e-6, r = rCm / 100; // SI単位に変換
+      const E = (K_COULOMB * q) / (r * r); // ← 出題にも採点にもこの式を使う
+      // 別解用：仮に1µCの試験電荷を置いたときの力から E=F/q0 を逆算して確かめる
+      const q0 = 1e-6;
+      const Falt = (K_COULOMB * q * q0) / (r * r);
+      const Ealt = Falt / q0;
+      return {
+        vars: { qMuC, rCm, q, r, E },
+        prompt: `点電荷 $q = ${qMuC}\\,\\mu\\text{C}$ が真空中に置かれている。この点電荷から距離 $r = ${rCm}\\,\\text{cm}$ の点における電場の強さ $E$ を求めよ。`,
+        given: `クーロン定数 $k = 8.99\\times10^{9}\\,\\text{N·m}^2/\\text{C}^2$ とする。`,
+        answer: E,
+        unitLabel: "N/C",
+        digits: 3,
+        why: `${term("電場", "電荷の周りの空間にできる、他の電荷に力を及ぼすはたらき")}は「その点に置いた試験電荷が受ける力 $F$」を、試験電荷自身の大きさ $q_0$ で割った量 $E=F/q_0$ として定義される。力そのもの（$F=kqq_0/r^2$）は試験電荷 $q_0$ の大きさに比例してしまうが、$q_0$ で割ることでその依存性を消し、その点の空間自体が持つ性質だけを取り出せる。`,
+        steps: [
+          `点電荷のまわりの電場は $E = k\\dfrac{|q|}{r^2}$ で与えられる。`,
+          `単位をSI単位に直す：$q = ${qMuC}\\,\\mu\\text{C} = ${q.toExponential(2)}\\,\\text{C}$、$r = ${rCm}\\,\\text{cm} = ${r}\\,\\text{m}$。`,
+          `代入すると $E = 8.99\\times10^{9} \\times \\dfrac{${q.toExponential(2)}}{(${r})^2}$`,
+          `$E = 8.99\\times10^{9} \\times \\dfrac{${q.toExponential(2)}}{${(r * r).toExponential(3)}}$`,
+          `よって $E \\approx ${fmt(E, 3)}\\,\\text{N/C}$。`,
+        ],
+        altSteps: [
+          `別解（試験電荷を置いて確かめる）：この点に $q_0=1\\,\\mu\\text{C}=${q0.toExponential(2)}\\,\\text{C}$ の試験電荷を置いたとすると、クーロンの法則より力の大きさは $F=k\\dfrac{qq_0}{r^2} \\approx ${fmt(Falt, 3)}\\,\\text{N}$。`,
+          `電場の定義 $E=F/q_0$ に代入すると $E \\approx \\dfrac{${fmt(Falt, 3)}}{${q0.toExponential(2)}} \\approx ${fmt(Ealt, 3)}\\,\\text{N/C}$ となり、直接計算した値と一致する（試験電荷 $q_0$ の大きさには依らない）。`,
+        ],
+        diagram: svgPointField("q", `q=${qMuC}µC, r=${rCm}cm`),
+      };
+    },
+  },
+  potential: {
+    name: "電位（点電荷）",
+    meta: "電位 / 高校物理",
+    unitLabel: "V",
+    gen() {
+      const qMuC = rand(1, 9);
+      const rCm = rand(10, 60);
+      const q = qMuC * 1e-6, r = rCm / 100; // SI単位に変換
+      const V = (K_COULOMB * q) / r; // ← 出題にも採点にもこの式を使う
+      return {
+        vars: { qMuC, rCm, q, r, V },
+        prompt: `点電荷 $q = ${qMuC}\\,\\mu\\text{C}$ から距離 $r = ${rCm}\\,\\text{cm}$ の点における電位 $V$ を求めよ（無限遠を基準点とする）。`,
+        given: `クーロン定数 $k = 8.99\\times10^{9}\\,\\text{N·m}^2/\\text{C}^2$ とする。`,
+        answer: V,
+        unitLabel: "V",
+        digits: 3,
+        why: `${term("電位", "その点に単位電荷を置いたときに持つ、電気的な位置エネルギー")}は、無限遠から単位電荷をその点まで運ぶのに必要な仕事として定義される${term("スカラー", "大きさだけを持ち、向きを持たない量")}量である。クーロン力は${term("保存力", "した仕事が経路に依らず、始点と終点だけで決まる力")}なので、どの経路で運んでも仕事の量は変わらない。だからこそ電位は「その点1つに対して1つの値」として決まり、電場のようにベクトル（向き）を持たない。`,
+        steps: [
+          `点電荷の電位は $V=k\\dfrac{q}{r}$ で与えられる。`,
+          `単位をSI単位に直す：$q=${qMuC}\\,\\mu\\text{C}=${q.toExponential(2)}\\,\\text{C}$、$r=${rCm}\\,\\text{cm}=${r}\\,\\text{m}$。`,
+          `代入すると $V=8.99\\times10^{9} \\times \\dfrac{${q.toExponential(2)}}{${r}}$`,
+          `よって $V\\approx ${fmt(V, 3)}\\,\\text{V}$。`,
+        ],
+        altSteps: [
+          `別解（電場を距離について積分して求める）：点電荷から距離 $r'$ の電場は $E(r')=k\\dfrac{q}{r'^2}$。電位は無限遠を基準に $V(r)=\\displaystyle\\int_r^{\\infty} E(r')\\,dr'$ として求められる（$W=qV$ の関係で、単位電荷を無限遠から運ぶ仕事に対応）。`,
+          `$V(r)=\\displaystyle\\int_r^{\\infty} k\\dfrac{q}{r'^2}\\,dr' = kq\\left[-\\dfrac{1}{r'}\\right]_r^{\\infty} = kq\\left(0-\\left(-\\dfrac{1}{r}\\right)\\right)=k\\dfrac{q}{r}$`,
+          `数値を代入すると $V\\approx ${fmt(V, 3)}\\,\\text{V}$ となり、直接計算した値と一致する。`,
+        ],
+        diagram: svgEquipotential("q", `r=${rCm}cm`),
+      };
+    },
+  },
+  kirchhoff: {
+    name: "キルヒホッフの法則",
+    meta: "回路 / 高校物理〜大学基礎",
+    unitLabel: "A",
+    gen() {
+      const e1 = rand(4, 12), R1 = rand(2, 10);
+      const e2 = rand(4, 12), R2 = rand(2, 10);
+      const R3 = rand(2, 10);
+      // ノードAの電位 V_A（B=0V基準）をキルヒホッフの電流則・電圧則から導いた式で求める
+      const VA = (e1 / R1 + e2 / R2) / (1 / R1 + 1 / R2 + 1 / R3); // ← 出題にも採点にもこの式を使う
+      const I1 = (e1 - VA) / R1;
+      const I2 = (e2 - VA) / R2;
+      const I3 = VA / R3; // ← 主答（電流則より I1+I2 と一致する）
+      // 別解（重ね合わせの原理）用の中間値
+      const R23 = (R2 * R3) / (R2 + R3);
+      const VA1 = e1 * (R23 / (R1 + R23));
+      const I3a = VA1 / R3;
+      const R13 = (R1 * R3) / (R1 + R3);
+      const VA2 = e2 * (R13 / (R2 + R13));
+      const I3b = VA2 / R3;
+      const I3sum = I3a + I3b;
+      return {
+        vars: { e1, R1, e2, R2, R3, VA, I1, I2, I3 },
+        prompt: `内部抵抗をもつ2つの電池が、抵抗 $R_3=${R3}\\,\\Omega$ に対して並列に接続されている回路を考える。電池1は起電力 $\\varepsilon_1=${e1}\\,\\text{V}$・直列抵抗 $R_1=${R1}\\,\\Omega$、電池2は起電力 $\\varepsilon_2=${e2}\\,\\text{V}$・直列抵抗 $R_2=${R2}\\,\\Omega$ を持ち、どちらも同じ2点間で $R_3$ に向かって電流を送り込む向きにつながれている。$R_3$ を流れる電流の大きさ $I_3$ を求めよ。`,
+        given: `2つの電池と $R_3$ が共有する2つの接続点をA・Bとし、Bを基準の $0\\,\\text{V}$ とする。`,
+        answer: I3,
+        unitLabel: "A",
+        digits: 3,
+        why: `${term("キルヒホッフの第1法則（電流則）", "回路の分岐点に流れ込む電流の合計と流れ出る電流の合計が等しいという法則")}は、電荷が分岐点に溜まり続けたり湧き出したりしないこと（電荷保存則）の表れ。${term("キルヒホッフの第2法則（電圧則）", "1つの閉じた回路を一周すると、電位変化の合計はちょうど0になるという法則")}は、1周して元の点に戻れば位置エネルギーも元に戻ること（エネルギー保存則）の表れ。枝が3本以上ある回路はオームの法則だけでは解けず、この2つの法則を連立させて解く必要がある。`,
+        steps: [
+          `A・B間の電位差を $V_A$ とする（$B$を$0\\,\\text{V}$とする）。電池1の枝の電流を $I_1$、電池2の枝を $I_2$、$R_3$の枝を $I_3$ とし、すべてAに流れ込む向きを正にとる。`,
+          `分岐点Aでの電流則より $I_1+I_2=I_3$ … ①`,
+          `各枝の電圧則より $\\varepsilon_1=I_1R_1+V_A$、$\\varepsilon_2=I_2R_2+V_A$、$V_A=I_3R_3$ なので、$I_1=\\dfrac{\\varepsilon_1-V_A}{R_1}$、$I_2=\\dfrac{\\varepsilon_2-V_A}{R_2}$、$I_3=\\dfrac{V_A}{R_3}$ … ②`,
+          `②を①に代入すると $\\dfrac{\\varepsilon_1-V_A}{R_1}+\\dfrac{\\varepsilon_2-V_A}{R_2}=\\dfrac{V_A}{R_3}$ となり、$V_A$ について解くと $V_A=\\dfrac{\\frac{\\varepsilon_1}{R_1}+\\frac{\\varepsilon_2}{R_2}}{\\frac{1}{R_1}+\\frac{1}{R_2}+\\frac{1}{R_3}}$。`,
+          `数値を代入すると $V_A=\\dfrac{\\frac{${e1}}{${R1}}+\\frac{${e2}}{${R2}}}{\\frac{1}{${R1}}+\\frac{1}{${R2}}+\\frac{1}{${R3}}} \\approx ${fmt(VA, 4)}\\,\\text{V}$。`,
+          `よって $I_3=\\dfrac{V_A}{R_3} \\approx \\dfrac{${fmt(VA, 4)}}{${R3}} \\approx ${fmt(I3, 3)}\\,\\text{A}$。`,
+        ],
+        altSteps: [
+          `別解（${term("重ね合わせの原理", "電源が複数ある線形回路では、各電源を1つずつ働かせたときの結果を単純に足し合わせれば全体の答えになるという性質")}）：電源が2つあるので、片方ずつ働かせた結果を足し合わせても同じ答えになる。`,
+          `$\\varepsilon_2$ を短絡（内部抵抗 $R_2$ は残したまま起電力だけ$0$にする）すると $R_2$と$R_3$が並列になる：$R_{23}=\\dfrac{R_2R_3}{R_2+R_3}\\approx ${fmt(R23, 4)}\\,\\Omega$。分圧則より $V_A^{(1)}=\\varepsilon_1\\dfrac{R_{23}}{R_1+R_{23}}\\approx ${fmt(VA1, 4)}\\,\\text{V}$、$I_3^{(1)}=\\dfrac{V_A^{(1)}}{R_3}\\approx ${fmt(I3a, 4)}\\,\\text{A}$。`,
+          `同様に $\\varepsilon_1$ を短絡すると $R_{13}=\\dfrac{R_1R_3}{R_1+R_3}\\approx ${fmt(R13, 4)}\\,\\Omega$、$V_A^{(2)}=\\varepsilon_2\\dfrac{R_{13}}{R_2+R_{13}}\\approx ${fmt(VA2, 4)}\\,\\text{V}$、$I_3^{(2)}=\\dfrac{V_A^{(2)}}{R_3}\\approx ${fmt(I3b, 4)}\\,\\text{A}$。`,
+          `2つを足すと $I_3=I_3^{(1)}+I_3^{(2)}\\approx ${fmt(I3sum, 3)}\\,\\text{A}$ となり、直接連立して解いた値と一致する。`,
+        ],
+        diagram: svgKirchhoffCircuit(`ε₁=${e1}V, R₁=${R1}Ω`, `ε₂=${e2}V, R₂=${R2}Ω`, `R₃=${R3}Ω`),
+      };
+    },
+  },
+  induction: {
+    name: "電磁誘導（ファラデーの法則）",
+    meta: "電磁誘導 / 高校物理",
+    unitLabel: "V",
+    gen() {
+      const N = rand(1, 4);
+      const B = randf(0.2, 1.5, 0.1); // 磁束密度 [T]
+      const L = rand(5, 20);          // 境界と垂直な辺の長さ [cm]
+      const v = randf(0.5, 3, 0.1);   // 引き出す速さ [m/s]
+      const Lm = L / 100;
+      const emf = N * B * Lm * v; // ← 出題にも採点にもこの式を使う（EMF = N·B·L·v = N·ΔΦ/Δt）
+      const coilWord = N > 1 ? `${N}回巻きのコイル` : "1回巻きの導線の輪";
+      return {
+        vars: { N, B, L, Lm, v, emf },
+        prompt: `一辺の長さ $L=${L}\\,\\text{cm}$ の長方形をした${coilWord}が、磁束密度 $B=${B}\\,\\text{T}$ の一様な磁場の境界をまたいで置かれている。磁場に垂直な向きを保ったまま、この${N > 1 ? "コイル" : "輪"}を速さ $v=${v}\\,\\text{m/s}$ で磁場の外へ引き出していく。境界をまたいでいる間に生じる誘導起電力の大きさ $\\varepsilon$ を求めよ。`,
+        given: `磁場は常に${N > 1 ? "コイル" : "輪"}の面に垂直である。`,
+        answer: emf,
+        unitLabel: "V",
+        digits: 3,
+        why: `${term("ファラデーの法則", "コイルを貫く磁束が変化すると、その変化を妨げる向きに起電力が生じるという法則")}では、コイルを貫く${term("磁束", "面を垂直に通り抜ける磁力線の量。面積×磁束密度で求まる")} $\\Phi$ が単位時間あたりどれだけ変化したか、その割合そのものが起電力の大きさになる。式の負号（${term("レンツの法則", "誘導電流は、それを引き起こした磁束の変化を妨げる向きに流れるという法則")}）は、変化を助ける向きに電流が流れると磁束の変化がさらに加速し、エネルギーが無限に増幅されてしまうため、自然は必ず変化を打ち消す向きに電流を流すことを意味する。`,
+        steps: [
+          `ファラデーの法則は $\\varepsilon=N\\left|\\dfrac{\\Delta\\Phi}{\\Delta t}\\right|$（$N$は巻数、1回あたりの磁束は $\\Phi=BA$）である。`,
+          `境界をまたいでいる間、磁場の中に残っている面積は一定の速さで減っていく。減る速さは（境界と垂直な辺の長さ）×（引き出す速さ）なので $\\dfrac{\\Delta A}{\\Delta t}=Lv$。`,
+          `よって $\\dfrac{\\Delta\\Phi}{\\Delta t}=B\\dfrac{\\Delta A}{\\Delta t}=BLv$ となり、$\\varepsilon=NBLv$。`,
+          `単位をSI単位に直す：$L=${L}\\,\\text{cm}=${Lm}\\,\\text{m}$。`,
+          `代入すると $\\varepsilon=${N}\\times${B}\\times${Lm}\\times${v}$`,
+          `よって $\\varepsilon\\approx ${fmt(emf, 3)}\\,\\text{V}$。`,
+        ],
+        altSteps: [
+          `別解（${term("運動起電力", "磁場の中を動く導線1本に生じる起電力。導線内の自由電子が受ける力から直接求まる")}の公式で確かめる）：境界をまたいでいる辺は、長さ $L$ の導線1本が磁場の中を速さ $v$ で動いているのと同じ状況なので、運動起電力の公式 $\\varepsilon_{1turn}=BLv$（導線内の自由電子が受けるローレンツ力を導線の長さぶん足し合わせたもの）がそのまま使える。`,
+          `$N$回巻きなら、これが直列に$N$個つながっているのと同じなので $\\varepsilon=N\\cdot BLv \\approx ${N}\\times${B}\\times${Lm}\\times${v} \\approx ${fmt(emf, 3)}\\,\\text{V}$ となり、磁束の変化から求めた値と一致する。`,
+        ],
+        diagram: svgInductionLoop(B, L, v, N),
       };
     },
   },
