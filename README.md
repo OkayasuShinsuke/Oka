@@ -115,3 +115,25 @@ TRANSLATE_ENDPOINT=https://libretranslate.de/translate npm start
 
 - サーバーで動かす: `npm start` のあと `http://localhost:3000/kids/`（スマホは `http://<PCのIP>:3000/kids/`）
 - ファイル単体: `public/kids/index.html` をブラウザで開くだけでも動きます
+
+## より自然な読み上げにする（VOICEVOX連携・任意）
+
+読み上げは標準ではブラウザの Web Speech API を使いますが、無料の音声合成エンジン
+**[VOICEVOX](https://voicevox.hiroshiba.jp/)** をPCで起動していると、より自然な声（デフォルトは
+「ずんだもん」）で自動的に読み上げるようになります。
+
+- 使い方: VOICEVOXの公式アプリをPCにダウンロードして起動しておくだけです（インストール不要な
+  ポータブル版もあります）。あとはいつもどおり `npm start` すればOK。アプリは自動でVOICEVOXの
+  有無を検知し、
+  - 起動している → VOICEVOXの声で読み上げ
+  - 起動していない／落ちている → 自動でブラウザの読み上げ（Web Speech API）にフォールバック
+  なので、VOICEVOXを使わなくてもアプリは問題なく動きます。
+- 設定（任意）: 話者を変えたい場合は `VOICEVOX_SPEAKER`（話者ID）、エンジンのURLを変えたい場合は
+  `VOICEVOX_URL` を環境変数で指定できます。話者IDはVOICEVOXエンジンの `GET /speakers` で確認できます。
+
+  ```bash
+  VOICEVOX_SPEAKER=3 npm start
+  ```
+- クレジット表記: VOICEVOXはキャラクターごとのクレジット表記が必要です。本アプリでは
+  「おんせい: VOICEVOX:ずんだもん」という表記をアプリ内（ホーム画面の注意書き）に記載しています。
+  話者を変更した場合は、その話者名に合わせて表記も変更してください。

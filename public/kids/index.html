@@ -474,7 +474,7 @@
       <button class="key k0" data-game="color"><span><span class="e">🐠</span>いろ<small>なにいろ かな</small></span></button>
       <button class="key k1" id="bookBtn"><span><span class="e">🐋</span>シールちょう<small id="bookCount">0まい</small></span></button>
     </div>
-    <p class="note">おうちの かたへ：もんだいは こえで よみあげます。iPhone は マナーモードを かいじょ して ください。<br>メンちゃんを タッチすると おはなし するよ。</p>
+    <p class="note">おうちの かたへ：もんだいは こえで よみあげます。iPhone は マナーモードを かいじょ して ください。<br>メンちゃんを タッチすると おはなし するよ。<br>（PCで VOICEVOX を起動していると、よりなめらかな音声で読み上げます。未起動でも自動でブラウザの読み上げに切り替わります）<br><small>おんせい: VOICEVOX:ずんだもん</small></p>
   </section>
 
   <!-- ===== ゲーム ===== -->
@@ -944,16 +944,72 @@ let speakQueue = [];
 let speakTimer = null;
 function stopSpeakQueue() {
   speakQueue = [];
+  speakGeneration++;
   if (speakTimer) { clearTimeout(speakTimer); speakTimer = null; }
 }
-function speakNextInQueue() {
-  if (speakQueue.length === 0) { speakTimer = null; return; }
-  const { chunk, mood } = speakQueue.shift();
+
+// ---- VOICEVOX（ローカルの無料音声合成エンジン）連携 ----
+// サーバー(server.js)の /api/tts が VOICEVOX を中継する。エンジンが起動していない
+// （＝ふつうの環境）場合は 503 かネットワークエラーになるので、必ずWeb Speech API に
+// フォールバックする。フォールバックの見た目・動きは今までとまったく同じにする。
+const VOICEVOX_TIMEOUT_MS = 1500;
+const ttsCache = new Map(); // key: "mood|chunk" -> Promise<string objectURL | null>
+let speakGeneration = 0; // stopSpeakQueue()された後の古い再生を無視するための世代番号
+
+function fetchTtsObjectUrl(chunk, moodKey) {
+  const key = `${moodKey}|${chunk}`;
+  if (ttsCache.has(key)) return ttsCache.get(key);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), VOICEVOX_TIMEOUT_MS);
+  const promise = fetch(`/api/tts?text=${encodeURIComponent(chunk)}&mood=${encodeURIComponent(moodKey)}`, { signal: controller.signal })
+    .then((r) => (r.ok ? r.blob() : null))
+    .then((blob) => (blob ? URL.createObjectURL(blob) : null))
+    .catch(() => null)
+    .finally(() => clearTimeout(timer));
+  ttsCache.set(key, promise);
+  // 失敗（null）はキャッシュに残さない（エンジンが後から起動した場合に再挑戦できるように）
+  promise.then((url) => { if (!url) ttsCache.delete(key); });
+  return promise;
+}
+
+function playObjectUrl(url) {
+  return new Promise((resolve, reject) => {
+    const el = new Audio(url);
+    el.onended = resolve;
+    el.onerror = reject;
+    el.play().catch(reject);
+  });
+}
+
+async function speakChunkViaVoicevox(chunk, moodKey) {
+  try {
+    const url = await fetchTtsObjectUrl(chunk, moodKey);
+    if (!url) return false;
+    await playObjectUrl(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function speakChunkViaWebSpeech(chunk, mood) {
   const u = new SpeechSynthesisUtterance(chunk);
   u.lang = "ja-JP"; if (jaVoice) u.voice = jaVoice;
   u.rate = mood.rate; u.pitch = mood.pitch;
   u.onend = u.onerror = () => { speakTimer = setTimeout(speakNextInQueue, 150); };
   speechSynthesis.speak(u);
+}
+
+function speakNextInQueue() {
+  if (speakQueue.length === 0) { speakTimer = null; return; }
+  const { chunk, mood, moodKey } = speakQueue.shift();
+  const generation = speakGeneration;
+  speakChunkViaVoicevox(chunk, moodKey).then((played) => {
+    if (generation !== speakGeneration) return; // stop済み・別の発話に切り替わっていたら何もしない
+    if (played) { speakTimer = setTimeout(speakNextInQueue, 150); return; }
+    // VOICEVOXが使えなかった場合、既存のWeb Speech API版にそのまま切り替える
+    speakChunkViaWebSpeech(chunk, mood);
+  });
 }
 function speak(text, mood = "ask") {
   if (!state.sound || !("speechSynthesis" in window)) return;
@@ -963,7 +1019,7 @@ function speak(text, mood = "ask") {
   const chunks = String(text).split(/(?<=[、。！？])\s*/).map((s) => s.trim()).filter(Boolean);
   if (chunks.length === 0) return;
   const m = SPEAK_MOODS[mood] || SPEAK_MOODS.ask;
-  speakQueue = chunks.map((chunk) => ({ chunk, mood: m }));
+  speakQueue = chunks.map((chunk) => ({ chunk, mood: m, moodKey: mood }));
   speakNextInQueue();
 }
 let audio = null;
