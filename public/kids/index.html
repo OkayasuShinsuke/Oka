@@ -234,7 +234,7 @@
     display: flex; gap: 6px; background: var(--paper); border: 3px solid var(--ink);
     border-radius: 999px; padding: 4px;
   }
-  .level button { flex: 1; border: 0; border-radius: 999px; padding: 9px 4px; font-size: .95rem; background: transparent; }
+  .level button { flex: 1; border: 0; border-radius: 999px; padding: 9px 2px; font-size: .8rem; background: transparent; }
   .level button[aria-pressed="true"] { background: var(--ink); color: var(--gold); }
   .menu { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .menu .key { min-height: 96px; gap: 0; font-family: var(--body); font-weight: 800; font-size: 1.15rem; line-height: 1.2; }
@@ -463,12 +463,14 @@
       <button class="key k3" id="shopBtn"><span><span class="e">🐧</span>きせかえ</span></button>
     </div>
     <div class="level" role="group" aria-label="むずかしさ">
-      <button id="lvEasy" aria-pressed="true">やさしい 〜5</button>
-      <button id="lvHard" aria-pressed="false">むずかしい 〜10</button>
+      <button id="lv1" aria-pressed="true">やさしい〜5</button>
+      <button id="lv2" aria-pressed="false">むずかし〜10</button>
+      <button id="lv3" aria-pressed="false">小1 〜20</button>
     </div>
     <div class="menu">
       <button class="key k1" data-game="count"><span><span class="e">🐟</span>かず<small>いくつ あるかな</small></span></button>
       <button class="key k0" data-game="add"><span><span class="e">🐙</span>たしざん<small>あわせて いくつ</small></span></button>
+      <button class="key k2" data-game="subtract"><span><span class="e">🦞</span>ひきざん<small>のこりは いくつ</small></span></button>
       <button class="key k3" data-game="kana"><span><span class="e">🐬</span>ひらがな<small>さいしょの もじ</small></span></button>
       <button class="key k2" data-game="more"><span><span class="e">🦀</span>どっち？<small>おおいのは どっち</small></span></button>
       <button class="key k0" data-game="color"><span><span class="e">🐠</span>いろ<small>なにいろ かな</small></span></button>
@@ -614,8 +616,18 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+// レベルは もともと "easy"/"hard" の2値だったが、5段階まで拡張できるように
+// 数値インデックス(1始まり)に変える。古い保存データ("easy"/"hard")が残っていても
+// 落ちないように変換する。
+function migrateLevelIdx() {
+  const raw = store.get("mk.level", null);
+  if (raw === "easy") return 1;
+  if (raw === "hard") return 2;
+  if (typeof raw === "number" && raw >= 1) return raw;
+  return 1;
+}
 const state = {
-  level: store.get("mk.level", "easy"),
+  levelIdx: migrateLevelIdx(),
   sound: store.get("mk.sound", true),
   stickers: store.get("mk.stickers", []),
   coins: store.get("mk.coins", 0),
@@ -1081,8 +1093,19 @@ const COLORS = [["あか", "#E53935"], ["あお", "#1E6FE0"], ["きいろ", "#FF
   ["ぴんく", "#FF8CC6"], ["むらさき", "#8E44AD"], ["おれんじ", "#FF8C1A"], ["ちゃいろ", "#8B5A2B"]];
 const STICKERS = ["🐳", "🐋", "🐬", "🦭", "🐟", "🐠", "🐡", "🦈", "🐙", "🦑",
   "🦐", "🦞", "🦀", "🐚", "🪸", "🪼", "🐢", "🐧", "🦦", "🦪"];
-const NAMES = { count: "かず", add: "たしざん", kana: "ひらがな", more: "どっち？", color: "いろ" };
-const maxNum = () => (state.level === "easy" ? 5 : 10);
+const NAMES = { count: "かず", add: "たしざん", subtract: "ひきざん", kana: "ひらがな", more: "どっち？", color: "いろ" };
+// ============================================================
+//  レベルの ていぎ（あとで Lv4・Lv5 を ついかしやすいよう配列にしておく）
+//   carry:  たしざんで くり上がり（1けたどうしの わの けたが 9をこえる）を まぜる
+//   borrow: ひきざんで くり下がり（じゅうのくらいを こえて かりる）を まぜる
+// ============================================================
+const LEVELS = [
+  { label: "やさしい〜5", max: 5 },
+  { label: "むずかしい〜10", max: 10 },
+  { label: "小1 〜20", max: 20, carry: true, borrow: true },
+];
+const curLevel = () => LEVELS[state.levelIdx - 1] || LEVELS[0];
+const maxNum = () => curLevel().max;
 
 // ============================================================
 //  ゲームごとの「もんだいを つくる 関数」
@@ -1097,11 +1120,36 @@ const GAMES = {
       stage: `<div class="frame">${cells}</div>`, praise: `${n}こ！ せいかい！` };
   },
   add() {
-    const max = maxNum(), a = rand(1, max - 1), b = rand(1, max - a), [emoji] = pick(THINGS);
+    const lvl = curLevel(), max = lvl.max;
+    let a, b;
+    if (lvl.carry && Math.random() < 0.6) {
+      // くり上がり：1けたどうし(2〜9)で わが 9をこえる もんだいを わざと まぜる（例: 7+6=13）
+      do { a = rand(2, 9); b = rand(2, 9); } while (a + b <= 9 || a + b > max);
+    } else {
+      a = rand(1, max - 1); b = rand(1, max - a);
+    }
+    const [emoji] = pick(THINGS);
     const group = (n) => `<div class="group">${emoji.repeat(n)}<b>${n}</b></div>`;
     return { kind: "num", answer: a + b, prompt: `${a} ＋ ${b} は？`, say: `${a} たす ${b} は いくつ？`,
       stage: `<div class="sum">${group(a)}<span class="op">＋</span>${group(b)}</div>`,
       praise: `${a} たす ${b} は ${a + b}！` };
+  },
+  subtract() {
+    const lvl = curLevel(), max = lvl.max;
+    let a, b;
+    if (lvl.borrow && Math.random() < 0.6) {
+      // くり下がり：じゅうのくらいを こえて かりる もんだいを わざと まぜる（例: 13-6=7）
+      a = rand(11, 18);
+      const ones = a % 10;
+      b = rand(ones + 1, 9);
+    } else {
+      a = rand(1, max); b = rand(0, a);
+    }
+    const [emoji] = pick(THINGS);
+    const group = (n) => `<div class="group">${emoji.repeat(n)}<b>${n}</b></div>`;
+    return { kind: "num", answer: a - b, prompt: `${a} － ${b} は？`, say: `${a} ひく ${b} は いくつ？`,
+      stage: `<div class="sum">${group(a)}<span class="op">－</span>${group(b)}</div>`,
+      praise: `${a} ひく ${b} は のこり ${a - b}！` };
   },
   kana() {
     const [ch, word, emoji] = pick(WORDS);
@@ -1113,7 +1161,7 @@ const GAMES = {
   more() {
     const max = maxNum() + 1;
     let a = rand(1, max), b = rand(1, max);
-    while (a === b || (state.level === "easy" && Math.abs(a - b) < 2)) { a = rand(1, max); b = rand(1, max); }
+    while (a === b || (state.levelIdx === 1 && Math.abs(a - b) < 2)) { a = rand(1, max); b = rand(1, max); }
     const [emoji] = pick(THINGS);
     return { kind: "choice", cls: "group-key", cols: 2, prompt: "おおいのは どっち？", say: "おおいのは どっちかな？",
       stage: `<div class="word"><span class="big">🦀</span></div>`,
@@ -1121,7 +1169,7 @@ const GAMES = {
       praise: `${Math.max(a, b)}こ の ほうが おおいね！` };
   },
   color() {
-    const set = shuffle(COLORS).slice(0, state.level === "easy" ? 3 : 4), [name] = pick(set);
+    const set = shuffle(COLORS).slice(0, state.levelIdx === 1 ? 3 : 4), [name] = pick(set);
     return { kind: "choice", cls: "color", cols: set.length === 4 ? 2 : 3, prompt: `「${name}」は どれ？`, say: `${name}は どれかな？`,
       stage: `<div class="word"><span class="big">🐠</span></div>`,
       choices: set.map(([n, hex]) => ({ html: "", color: hex, ok: n === name, label: n })), praise: `${name}！ せいかい！` };
@@ -1164,8 +1212,7 @@ function renderHud() {
   document.querySelectorAll(".coinNum").forEach((el) => (el.textContent = state.coins));
   $("bookCount").textContent = `${state.stickers.length}まい`;
   $("soundBtn").classList.toggle("muted", !state.sound);
-  $("lvEasy").setAttribute("aria-pressed", state.level === "easy");
-  $("lvHard").setAttribute("aria-pressed", state.level === "hard");
+  LEVELS.forEach((_, i) => { const b = $("lv" + (i + 1)); if (b) b.setAttribute("aria-pressed", state.levelIdx === i + 1); });
   const shopPill = $("shopStickerPill");
   if (shopPill) shopPill.innerHTML = `🐋 <b>${state.stickers.length}</b>まい`;
   renderAllLovePanels();
@@ -1520,8 +1567,10 @@ if (!reduced) {
 // ---------- ボタンの つなぎこみ ----------
 document.querySelectorAll("[data-game]").forEach((b) => b.addEventListener("click", () => { sfx.tap(); startGame(b.dataset.game); }));
 $("soundBtn").addEventListener("click", () => { state.sound = !state.sound; store.set("mk.sound", state.sound); renderHud(); speak("おとを だすよ"); });
-$("lvEasy").addEventListener("click", () => { state.level = "easy"; store.set("mk.level", "easy"); renderHud(); });
-$("lvHard").addEventListener("click", () => { state.level = "hard"; store.set("mk.level", "hard"); renderHud(); });
+LEVELS.forEach((_, i) => {
+  const btn = $("lv" + (i + 1));
+  if (btn) btn.addEventListener("click", () => { sfx.tap(); state.levelIdx = i + 1; store.set("mk.level", state.levelIdx); renderHud(); });
+});
 $("repeatBtn").addEventListener("click", () => speak(game.q.say));
 $("backBtn").addEventListener("click", () => { if ("speechSynthesis" in window) { speechSynthesis.cancel(); stopSpeakQueue(); } show("home"); });
 $("againBtn").addEventListener("click", () => startGame(game.key));
@@ -1544,7 +1593,7 @@ function collectSaveData() {
     equip: state.equip,
     love: state.love,
     lastFed: state.lastFed,
-    level: state.level,
+    levelIdx: state.levelIdx,
     sound: state.sound,
   };
 }
@@ -1556,7 +1605,10 @@ function applySaveData(data) {
   if (data.equip && typeof data.equip === "object") state.equip = data.equip;
   if (typeof data.love === "number") state.love = data.love;
   if (typeof data.lastFed === "number") state.lastFed = data.lastFed;
-  if (typeof data.level === "string") state.level = data.level;
+  // ふるい ひきつぎデータ(level:"easy"/"hard")と あたらしい データ(levelIdx:数値)の どちらでも うごくように
+  if (typeof data.levelIdx === "number" && data.levelIdx >= 1) state.levelIdx = data.levelIdx;
+  else if (data.level === "easy") state.levelIdx = 1;
+  else if (data.level === "hard") state.levelIdx = 2;
   if (typeof data.sound === "boolean") state.sound = data.sound;
   store.set("mk.coins", state.coins);
   store.set("mk.stickers", state.stickers);
@@ -1564,7 +1616,7 @@ function applySaveData(data) {
   store.set("mk.equip", state.equip);
   store.set("mk.love", state.love);
   store.set("mk.fed", state.lastFed);
-  store.set("mk.level", state.level);
+  store.set("mk.level", state.levelIdx);
   store.set("mk.sound", state.sound);
 }
 function setTransferMsg(msg) { $("transferMsg").textContent = msg || ""; }
