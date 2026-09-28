@@ -179,6 +179,8 @@
   .frame span:not(:empty) { animation: popin .35s backwards; }
   .frame span:empty { background: #F5F6FC; }
   .sum { display: flex; align-items: center; gap: 8px; }
+  .marray { display: flex; flex-direction: column; align-items: center; gap: 2px; max-height: 100%; overflow: hidden; }
+  .marray .mrow { display: flex; gap: 2px; }
   .group {
     border: 3px solid var(--ink); border-radius: 14px; padding: 6px; max-width: 132px;
     display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; font-size: 1.6rem; background: #FFF9E6;
@@ -225,17 +227,22 @@
     display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 1px;
   }
   .key.color { min-height: 92px; }
+  .key.text-choice { font-family: var(--body); font-weight: 800; font-size: 1.05rem; min-height: 64px; }
   .key.ok { outline: 5px solid var(--gold); outline-offset: 2px; animation: bump .5s; }
   .key.ng { opacity: .35; animation: shake .4s; pointer-events: none; }
   .k0 { background: var(--pink); } .k1 { background: var(--lemon); } .k2 { background: var(--blue); } .k3 { background: var(--mint); }
 
   /* ===== ホーム ===== */
   .level {
-    display: flex; gap: 6px; background: var(--paper); border: 3px solid var(--ink);
-    border-radius: 999px; padding: 4px;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; background: var(--paper); border: 3px solid var(--ink);
+    border-radius: 18px; padding: 5px;
   }
-  .level button { flex: 1; border: 0; border-radius: 999px; padding: 9px 2px; font-size: .8rem; background: transparent; }
+  .level button {
+    border: 0; border-radius: 12px; padding: 7px 1px; font-size: .64rem; line-height: 1.2;
+    background: transparent; white-space: normal; word-break: keep-all;
+  }
   .level button[aria-pressed="true"] { background: var(--ink); color: var(--gold); }
+  @media (max-width: 400px) { .level button { font-size: .58rem; padding: 6px 1px; } }
   .menu { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .menu .key { min-height: 96px; gap: 0; font-family: var(--body); font-weight: 800; font-size: 1.15rem; line-height: 1.2; }
   .menu .key .e { font-size: 2.4rem; line-height: 1.1; display: block; }
@@ -462,11 +469,7 @@
       <button class="key k2" id="feedBtn"><span><span class="e">🦐</span>ごはん</span></button>
       <button class="key k3" id="shopBtn"><span><span class="e">🐧</span>きせかえ</span></button>
     </div>
-    <div class="level" role="group" aria-label="むずかしさ">
-      <button id="lv1" aria-pressed="true">やさしい〜5</button>
-      <button id="lv2" aria-pressed="false">むずかし〜10</button>
-      <button id="lv3" aria-pressed="false">小1 〜20</button>
-    </div>
+    <div class="level" role="group" aria-label="むずかしさ" id="levelGroup"></div>
     <div class="menu">
       <button class="key k1" data-game="count"><span><span class="e">🐟</span>かず<small>いくつ あるかな</small></span></button>
       <button class="key k0" data-game="add"><span><span class="e">🐙</span>たしざん<small>あわせて いくつ</small></span></button>
@@ -474,6 +477,9 @@
       <button class="key k3" data-game="kana"><span><span class="e">🐬</span>ひらがな<small>さいしょの もじ</small></span></button>
       <button class="key k2" data-game="more"><span><span class="e">🦀</span>どっち？<small>おおいのは どっち</small></span></button>
       <button class="key k0" data-game="color"><span><span class="e">🐠</span>いろ<small>なにいろ かな</small></span></button>
+      <button class="key k2" data-game="multiply" data-minlv="4"><span><span class="e">🦑</span>かけざん<small>グループが いくつ</small></span></button>
+      <button class="key k0" data-game="divide" data-minlv="5"><span><span class="e">🦈</span>わりざん<small>あまりは いくつ</small></span></button>
+      <button class="key k3" data-game="clock" data-minlv="5"><span><span class="e">🐡</span>とけい<small>なんじ なんぷん</small></span></button>
       <button class="key k1" id="bookBtn"><span><span class="e">🐋</span>シールちょう<small id="bookCount">0まい</small></span></button>
     </div>
     <p class="note">おうちの かたへ：もんだいは こえで よみあげます。iPhone は マナーモードを かいじょ して ください。<br>メンちゃんを タッチすると おはなし するよ。<br>（PCで VOICEVOX を起動していると、よりなめらかな音声で読み上げます。未起動でも自動でブラウザの読み上げに切り替わります）<br><small>おんせい: VOICEVOX:ずんだもん</small></p>
@@ -1093,19 +1099,76 @@ const COLORS = [["あか", "#E53935"], ["あお", "#1E6FE0"], ["きいろ", "#FF
   ["ぴんく", "#FF8CC6"], ["むらさき", "#8E44AD"], ["おれんじ", "#FF8C1A"], ["ちゃいろ", "#8B5A2B"]];
 const STICKERS = ["🐳", "🐋", "🐬", "🦭", "🐟", "🐠", "🐡", "🦈", "🐙", "🦑",
   "🦐", "🦞", "🦀", "🐚", "🪸", "🪼", "🐢", "🐧", "🦦", "🦪"];
-const NAMES = { count: "かず", add: "たしざん", subtract: "ひきざん", kana: "ひらがな", more: "どっち？", color: "いろ" };
+const NAMES = { count: "かず", add: "たしざん", subtract: "ひきざん", kana: "ひらがな", more: "どっち？", color: "いろ",
+  multiply: "かけざん", divide: "わりざん", clock: "とけい" };
+
+// ============================================================
+//  とけい の アナログ時計 SVG（tako() と 同じように 文字列を つくる関数）
+// ============================================================
+function clockSvg(hour, minute) {
+  const nums = Array.from({ length: 12 }, (_, i) => {
+    const n = i + 1, ang = (n / 12) * 2 * Math.PI - Math.PI / 2;
+    const x = 60 + Math.cos(ang) * 46, y = 60 + Math.sin(ang) * 46;
+    return `<text x="${x}" y="${y + 5}" font-size="13" text-anchor="middle" font-family="sans-serif" font-weight="700" fill="#2A2250">${n}</text>`;
+  }).join("");
+  const hourDeg = ((hour % 12) + minute / 60) * 30 - 90;
+  const minDeg = minute * 6 - 90;
+  const hx = 60 + Math.cos((hourDeg * Math.PI) / 180) * 26, hy = 60 + Math.sin((hourDeg * Math.PI) / 180) * 26;
+  const mx = 60 + Math.cos((minDeg * Math.PI) / 180) * 38, my = 60 + Math.sin((minDeg * Math.PI) / 180) * 38;
+  return `<svg viewBox="0 0 120 120" width="140" height="140" aria-hidden="true">
+    <circle cx="60" cy="60" r="56" fill="#FFF9E6" stroke="#2A2250" stroke-width="4"/>
+    ${nums}
+    <line x1="60" y1="60" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="#2A2250" stroke-width="5" stroke-linecap="round"/>
+    <line x1="60" y1="60" x2="${mx.toFixed(1)}" y2="${my.toFixed(1)}" stroke="#3D6BFF" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="60" cy="60" r="4" fill="#FF5C8A"/>
+  </svg>`;
+}
 // ============================================================
 //  レベルの ていぎ（あとで Lv4・Lv5 を ついかしやすいよう配列にしておく）
 //   carry:  たしざんで くり上がり（1けたどうしの わの けたが 9をこえる）を まぜる
 //   borrow: ひきざんで くり下がり（じゅうのくらいを こえて かりる）を まぜる
 // ============================================================
 const LEVELS = [
-  { label: "やさしい〜5", max: 5 },
-  { label: "むずかしい〜10", max: 10 },
-  { label: "小1 〜20", max: 20, carry: true, borrow: true },
+  { label: "やさしい", max: 5 },
+  { label: "むずかしい", max: 10 },
+  { label: "小1", max: 20, carry: true, borrow: true },
+  { label: "小2", max: 99, carry: true, borrow: true, digits: 2, times: true },
+  { label: "小3", max: 999, carry: true, borrow: true, digits: 3, times: true, divide: true, clock: true },
 ];
 const curLevel = () => LEVELS[state.levelIdx - 1] || LEVELS[0];
 const maxNum = () => curLevel().max;
+
+// 2桁・3桁の たしざん／ひきざんで、わざと くり上がり・くり下がりを ある程度の
+// かくりつで まぜる ための ヘルパー（digits: 2または3）。
+function addWithCarry(digits, max) {
+  const lo = digits === 3 ? 100 : 10;
+  let a = rand(lo, max - 1);
+  let b = rand(1, max - a);
+  if (Math.random() < 0.65) {
+    const aOnes = a % 10, need = 10 - aOnes;
+    if (need <= 9) {
+      const bOnes = rand(need, 9);
+      const bTens = Math.floor(b / 10);
+      const nb = bTens * 10 + bOnes || bOnes;
+      if (nb >= 1 && a + nb <= max) b = nb;
+    }
+  }
+  return [a, b];
+}
+function subWithBorrow(digits, max) {
+  const lo = digits === 3 ? 100 : 10;
+  let a = rand(lo, max);
+  let b = rand(0, a);
+  if (Math.random() < 0.65 && a % 10 < 9) {
+    const aOnes = a % 10;
+    const bOnes = rand(aOnes + 1, 9);
+    const bTens = Math.floor(b / 10);
+    let nb = bTens * 10 + bOnes;
+    if (nb > a) nb = Math.min(a, bOnes);
+    b = nb;
+  }
+  return [a, b];
+}
 
 // ============================================================
 //  ゲームごとの「もんだいを つくる 関数」
@@ -1113,7 +1176,9 @@ const maxNum = () => curLevel().max;
 // ============================================================
 const GAMES = {
   count() {
-    const max = maxNum(), n = rand(1, max), [emoji, name] = pick(THINGS);
+    // かず(count)は「見て 数える」ゲームなので、Lv4/5で maxNum() が 99/999 に
+    // ふえても 20こ を こえないように 上限を かける（それ以上は 見て数えられない）
+    const max = Math.min(maxNum(), 20), n = rand(1, max), [emoji, name] = pick(THINGS);
     const cells = Array.from({ length: max }, (_, i) =>
       `<span style="animation-delay:${i * 0.05}s">${i < n ? emoji : ""}</span>`).join("");
     return { kind: "num", answer: n, prompt: `${name}は いくつ？`, say: `${name}は いくつ あるかな？`,
@@ -1122,14 +1187,20 @@ const GAMES = {
   add() {
     const lvl = curLevel(), max = lvl.max;
     let a, b;
-    if (lvl.carry && Math.random() < 0.6) {
+    if (lvl.digits >= 2) {
+      // 小2・小3：2桁/3桁の たしざん。くり上がりを ある程度の かくりつで まぜる
+      [a, b] = addWithCarry(lvl.digits, max);
+    } else if (lvl.carry && Math.random() < 0.6) {
       // くり上がり：1けたどうし(2〜9)で わが 9をこえる もんだいを わざと まぜる（例: 7+6=13）
       do { a = rand(2, 9); b = rand(2, 9); } while (a + b <= 9 || a + b > max);
     } else {
       a = rand(1, max - 1); b = rand(1, max - a);
     }
     const [emoji] = pick(THINGS);
-    const group = (n) => `<div class="group">${emoji.repeat(n)}<b>${n}</b></div>`;
+    // 2桁/3桁のときは えもじを nこ くりかえすと おおすぎるので、すうじの カードだけ表示する
+    const group = lvl.digits >= 2
+      ? (n) => `<div class="group"><b>${n}</b></div>`
+      : (n) => `<div class="group">${emoji.repeat(n)}<b>${n}</b></div>`;
     return { kind: "num", answer: a + b, prompt: `${a} ＋ ${b} は？`, say: `${a} たす ${b} は いくつ？`,
       stage: `<div class="sum">${group(a)}<span class="op">＋</span>${group(b)}</div>`,
       praise: `${a} たす ${b} は ${a + b}！` };
@@ -1137,7 +1208,10 @@ const GAMES = {
   subtract() {
     const lvl = curLevel(), max = lvl.max;
     let a, b;
-    if (lvl.borrow && Math.random() < 0.6) {
+    if (lvl.digits >= 2) {
+      // 小2・小3：2桁/3桁の ひきざん。くり下がりを ある程度の かくりつで まぜる
+      [a, b] = subWithBorrow(lvl.digits, max);
+    } else if (lvl.borrow && Math.random() < 0.6) {
       // くり下がり：じゅうのくらいを こえて かりる もんだいを わざと まぜる（例: 13-6=7）
       a = rand(11, 18);
       const ones = a % 10;
@@ -1146,10 +1220,56 @@ const GAMES = {
       a = rand(1, max); b = rand(0, a);
     }
     const [emoji] = pick(THINGS);
-    const group = (n) => `<div class="group">${emoji.repeat(n)}<b>${n}</b></div>`;
+    const group = lvl.digits >= 2
+      ? (n) => `<div class="group"><b>${n}</b></div>`
+      : (n) => `<div class="group">${emoji.repeat(n)}<b>${n}</b></div>`;
     return { kind: "num", answer: a - b, prompt: `${a} － ${b} は？`, say: `${a} ひく ${b} は いくつ？`,
       stage: `<div class="sum">${group(a)}<span class="op">－</span>${group(b)}</div>`,
       praise: `${a} ひく ${b} は のこり ${a - b}！` };
+  },
+  // 九九（1〜9 × 1〜9）。「aつの グループに bひきずつ」の 配列(グループ)で かけざんの
+  // いみを 見えるようにする。答えは 既存の テンキー(kind:"num")で いれる。
+  multiply() {
+    const a = rand(1, 9), b = rand(1, 9), total = a * b;
+    const [emoji] = pick(THINGS);
+    const fs = total > 40 ? "0.85rem" : total > 20 ? "1.1rem" : "1.4rem";
+    const rows = Array.from({ length: a }, () => `<div class="mrow">${emoji.repeat(b)}</div>`).join("");
+    return { kind: "num", answer: total, prompt: `${a} × ${b} は？`,
+      say: `${a}つの グループに ${b}ひきずつ。 あわせて いくつ かな？`,
+      stage: `<div class="marray" style="font-size:${fs}">${rows}</div>`,
+      praise: `${a} × ${b} は ${total}！` };
+  },
+  // あまりのある わり算（小3・Lv5のみ 出題）。子どもには シンプルな
+  // 「◯あまり◯」の 4択で答えさせる（数字2つを別々に入れるより 分かりやすいため）。
+  divide() {
+    const b = rand(2, 9), q = rand(1, 9), r = rand(1, b - 1), a = b * q + r;
+    const correct = `${q}あまり${r}`;
+    const wrongPool = [];
+    while (wrongPool.length < 3) {
+      const wq = Math.max(0, q + pick([-1, 1, 2, -2]));
+      const wr = rand(0, b - 1);
+      const wl = `${wq}あまり${wr}`;
+      if (wl !== correct && !wrongPool.includes(wl)) wrongPool.push(wl);
+    }
+    return { kind: "choice", cls: "text-choice", cols: 2, prompt: `${a} ÷ ${b} は？`, say: `${a} わる ${b} は？`,
+      stage: `<div class="word"><span class="big">🦈</span></div>`,
+      choices: shuffle([correct, ...wrongPool]).map((l) => ({ html: l, ok: l === correct, label: l })),
+      praise: `${a} わる ${b} は ${correct}！` };
+  },
+  // とけい（小3・Lv5のみ 出題）。アナログ時計を SVGで 表示して、4択で 時刻を えらぶ
+  clock() {
+    const hour = rand(1, 12), minute = pick([0, 15, 30, 45]);
+    const label = (h, m) => (m === 0 ? `${h}じ` : `${h}じ${m}ふん`);
+    const correct = label(hour, minute);
+    const wrongPool = [];
+    while (wrongPool.length < 3) {
+      const wl = label(rand(1, 12), pick([0, 15, 30, 45]));
+      if (wl !== correct && !wrongPool.includes(wl)) wrongPool.push(wl);
+    }
+    return { kind: "choice", cls: "text-choice", cols: 2, prompt: "なんじ なんぷん？", say: "なんじ なんぷんかな？",
+      stage: clockSvg(hour, minute),
+      choices: shuffle([correct, ...wrongPool]).map((l) => ({ html: l, ok: l === correct, label: l })),
+      praise: `いまは ${correct}！` };
   },
   kana() {
     const [ch, word, emoji] = pick(WORDS);
@@ -1159,7 +1279,8 @@ const GAMES = {
       choices: shuffle([ch, ...others]).map((c) => ({ html: c, ok: c === ch, label: c })), praise: `${ch}！ ${word}！` };
   },
   more() {
-    const max = maxNum() + 1;
+    // どっち(more)も 同じ理由で、えもじを ならべられる 上限(20)を かける
+    const max = Math.min(maxNum(), 20) + 1;
     let a = rand(1, max), b = rand(1, max);
     while (a === b || (state.levelIdx === 1 && Math.abs(a - b) < 2)) { a = rand(1, max); b = rand(1, max); }
     const [emoji] = pick(THINGS);
@@ -1208,11 +1329,27 @@ function updateHungryBubble() {
     b.remove();
   }
 }
+// レベルボタンを LEVELS配列から つくる（5だんかいに ふえても ここだけ かえればいい）
+function buildLevelSelector() {
+  const grp = $("levelGroup");
+  if (!grp) return;
+  grp.innerHTML = LEVELS.map((lvl, i) =>
+    `<button id="lv${i + 1}" aria-pressed="${state.levelIdx === i + 1}">${lvl.label}</button>`).join("");
+}
+// Lv4(九九)・Lv5(わりざん・とけい)は それより低い レベルでは ホーム画面の
+// メニューから 一時的に かくす（data-minlv 属性で 汎用的に はんてい）
+function updateGameVisibility() {
+  document.querySelectorAll("[data-game]").forEach((b) => {
+    const minlv = parseInt(b.dataset.minlv || "1", 10);
+    b.hidden = state.levelIdx < minlv;
+  });
+}
 function renderHud() {
   document.querySelectorAll(".coinNum").forEach((el) => (el.textContent = state.coins));
   $("bookCount").textContent = `${state.stickers.length}まい`;
   $("soundBtn").classList.toggle("muted", !state.sound);
   LEVELS.forEach((_, i) => { const b = $("lv" + (i + 1)); if (b) b.setAttribute("aria-pressed", state.levelIdx === i + 1); });
+  updateGameVisibility();
   const shopPill = $("shopStickerPill");
   if (shopPill) shopPill.innerHTML = `🐋 <b>${state.stickers.length}</b>まい`;
   renderAllLovePanels();
@@ -1565,6 +1702,7 @@ if (!reduced) {
 }
 
 // ---------- ボタンの つなぎこみ ----------
+buildLevelSelector();
 document.querySelectorAll("[data-game]").forEach((b) => b.addEventListener("click", () => { sfx.tap(); startGame(b.dataset.game); }));
 $("soundBtn").addEventListener("click", () => { state.sound = !state.sound; store.set("mk.sound", state.sound); renderHud(); speak("おとを だすよ"); });
 LEVELS.forEach((_, i) => {
