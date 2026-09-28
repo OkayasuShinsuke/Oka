@@ -669,6 +669,72 @@ function svgInductionLoop(BLabel, LLabel, vLabel, turns) {
   `, "0 0 220 134", "電磁誘導：磁場から引き出されるコイルの模式図");
 }
 
+// 交流回路：インピーダンス三角形（R・X・|Z|・位相角φ）
+function svgImpedanceTriangle(Rval, Xval, Zval, phiDeg) {
+  const W = 200, H = 148, padL = 30, baseY = 108;
+  const maxLeg = 130;
+  const scale = maxLeg / Math.max(Rval, Xval, 1);
+  const rx = padL + Rval * scale;
+  const xy = baseY - Xval * scale;
+  const arcR = Math.min(24, (rx - padL) * 0.5);
+  return svgWrap(`
+    <line x1="${padL}" y1="${baseY}" x2="${rx.toFixed(1)}" y2="${baseY}" stroke="var(--accent)" stroke-width="2.5"/>
+    <line x1="${rx.toFixed(1)}" y1="${baseY}" x2="${rx.toFixed(1)}" y2="${xy.toFixed(1)}" stroke="var(--accent-2)" stroke-width="2.5"/>
+    <line x1="${padL}" y1="${baseY}" x2="${rx.toFixed(1)}" y2="${xy.toFixed(1)}" stroke="var(--accent-3)" stroke-width="2.5"/>
+    <path d="M ${(padL + arcR).toFixed(1)} ${baseY} A ${arcR.toFixed(1)} ${arcR.toFixed(1)} 0 0 1 ${(padL + arcR * Math.cos(Math.atan2(xy - baseY, rx - padL))).toFixed(1)} ${(baseY + arcR * Math.sin(Math.atan2(xy - baseY, rx - padL))).toFixed(1)}" fill="none" stroke="var(--ink-dim)" stroke-width="1"/>
+    <text x="${(padL + arcR + 10).toFixed(1)}" y="${(baseY - 6).toFixed(1)}" font-size="10" fill="var(--ink-dim)">φ</text>
+    <text x="${((padL + rx) / 2).toFixed(1)}" y="${(baseY + 16).toFixed(1)}" text-anchor="middle" font-size="11" fill="var(--accent)">R</text>
+    <text x="${(rx + 14).toFixed(1)}" y="${((baseY + xy) / 2).toFixed(1)}" font-size="11" fill="var(--accent-2)">X</text>
+    <text x="${((padL + rx) / 2 - 8).toFixed(1)}" y="${((baseY + xy) / 2 - 6).toFixed(1)}" text-anchor="middle" font-size="11" fill="var(--accent-3)">|Z|</text>
+    <text x="${(W / 2).toFixed(1)}" y="18" text-anchor="middle" font-size="9" fill="var(--ink-dim)">R=${fmt(Rval, 3)}Ω, X=${fmt(Xval, 3)}Ω, |Z|=${fmt(Zval, 3)}Ω, φ≈${fmt(phiDeg, 3)}°</text>
+  `, `0 0 ${W} ${H}`, "インピーダンス三角形（R・X・|Z|・位相角φ）");
+}
+
+// 電磁波：滑らかな正弦波と1波長分の長さの表示
+function svgSineWave(note) {
+  const W = 240, H = 110, padL = 16, padR = 16, midY = 52, amp = 28;
+  const periodPx = (W - padL - padR) / 1.4;
+  const N = 100;
+  const pts = [];
+  for (let i = 0; i <= N; i++) {
+    const x = padL + (W - padL - padR) * i / N;
+    const theta = ((x - padL) / periodPx) * 2 * Math.PI;
+    pts.push([x, midY - amp * Math.sin(theta)]);
+  }
+  const curve = pts.map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const x0 = padL, x1 = padL + periodPx;
+  return svgWrap(`
+    <line x1="${padL}" y1="${midY}" x2="${W - padR}" y2="${midY}" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 3"/>
+    <path d="${curve}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+    <line x1="${x0}" y1="${midY + amp + 14}" x2="${x1.toFixed(1)}" y2="${midY + amp + 14}" stroke="var(--accent-3)" stroke-width="1.4"/>
+    <line x1="${x0}" y1="${midY + amp + 8}" x2="${x0}" y2="${midY + amp + 20}" stroke="var(--accent-3)" stroke-width="1.4"/>
+    <line x1="${x1.toFixed(1)}" y1="${midY + amp + 8}" x2="${x1.toFixed(1)}" y2="${midY + amp + 20}" stroke="var(--accent-3)" stroke-width="1.4"/>
+    <text x="${((x0 + x1) / 2).toFixed(1)}" y="${(midY + amp + 32).toFixed(1)}" text-anchor="middle" font-size="11" fill="var(--accent-3)">λ</text>
+    <text x="${(W / 2).toFixed(1)}" y="14" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">${note || ""}</text>
+  `, `0 0 ${W} ${H}`, "電磁波：1波長分の長さλを示す正弦波");
+}
+
+// ベクトル解析：ガウスの面（球面）と中心の点電荷、外向きのフラックスの矢印
+function svgGaussianSphere(qLabel, note) {
+  const cx = 100, cy = 60, R = 44;
+  let arrows = "";
+  for (let a = 0; a < 360; a += 45) {
+    const rad = (a * Math.PI) / 180;
+    const x1 = cx + (R - 14) * Math.cos(rad), y1 = cy + (R - 14) * Math.sin(rad);
+    const x2 = cx + (R + 14) * Math.cos(rad), y2 = cy + (R + 14) * Math.sin(rad);
+    arrows += `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} L${x2.toFixed(1)} ${y2.toFixed(1)}" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrowG)"/>`;
+  }
+  return svgWrap(`
+    <defs><marker id="arrowG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/></marker></defs>
+    <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--accent-3)" stroke-width="1.6" stroke-dasharray="4 3"/>
+    ${arrows}
+    <circle cx="${cx}" cy="${cy}" r="14" fill="var(--accent-2)"/>
+    <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="12" fill="#fff" font-weight="700">${qLabel}</text>
+    <text x="${cx}" y="${cy + R + 26}" text-anchor="middle" font-size="9.5" fill="var(--ink-dim)">${note || ""}</text>
+  `, "0 0 200 146", "ガウスの面（球面）を貫く電気力線の模式図");
+}
+
 // 微積分：実際の関数・区間からグラフと面積の塗りを計算して描く
 function svgAreaUnderCurve(f, a, b) {
   const padX = (b - a) * 0.15;
@@ -1034,6 +1100,155 @@ const EM_TOPICS = {
           `$N$回巻きなら、これが直列に$N$個つながっているのと同じなので $\\varepsilon=N\\cdot BLv \\approx ${N}\\times${B}\\times${Lm}\\times${v} \\approx ${fmt(emf, 3)}\\,\\text{V}$ となり、磁束の変化から求めた値と一致する。`,
         ],
         diagram: svgInductionLoop(B, L, v, N),
+      };
+    },
+  },
+  ac: {
+    name: "交流回路（インピーダンス）",
+    meta: "交流 / 大学基礎",
+    unitLabel: "Ω",
+    gen() {
+      // RC直列回路。抵抗R[Ω]・静電容量C[µF]・周波数f[Hz]から
+      // 角周波数ω・リアクタンスXc・インピーダンス|Z|・位相角φを同じ式から計算する
+      const R = rand(10, 300);
+      const CuF = rand(1, 50);
+      const fHz = rand(50, 2000);
+      const C = CuF * 1e-6;
+      const omega = 2 * Math.PI * fHz;
+      const Xc = 1 / (omega * C); // ← 出題にも採点にもこの式を使う
+      const Z = Math.sqrt(R * R + Xc * Xc); // ← 主答
+      const phiRad = Math.atan2(-Xc, R); // RC回路：電流の位相が電圧より進む（負の角）
+      const phiDeg = (phiRad * 180) / Math.PI;
+      const Zalt = R / Math.cos(phiRad); // 別解の検算用
+      return {
+        vars: { R, CuF, fHz, C, omega, Xc, Z, phiDeg },
+        prompt: `抵抗 $R=${R}\\,\\Omega$ とコンデンサ $C=${CuF}\\,\\mu\\text{F}$ を直列に接続したRC回路に、` +
+          `周波数 $f=${fHz}\\,\\text{Hz}$ の交流電源をつないだ。この回路のインピーダンスの大きさ $|Z|$ を求めよ。`,
+        given: `角周波数は $\\omega=2\\pi f$ で与えられる。`,
+        answer: Z,
+        unitLabel: "Ω",
+        digits: 4,
+        why: `コンデンサの${term("リアクタンス", "コンデンサやコイルが交流に対して示す、周波数に依存する「抵抗のようなもの」")} $X_C=1/(\\omega C)$ は、` +
+          `周波数が高くなるほど小さくなる——電圧が速く振動するほどコンデンサの充放電が追いつき、電流を通しやすくなるため。` +
+          `また抵抗 $R$ による電圧降下とコンデンサ $X_C$ による電圧降下は${term("位相", "交流の波が1周期のうちどの位置にあるかを表す角度")}が90°ずれているため、` +
+          `単純な足し算ではなく直角三角形の斜辺として合成する（$|Z|=\\sqrt{R^2+X_C^2}$）。`,
+        steps: [
+          `RC直列回路のインピーダンスの大きさは $|Z|=\\sqrt{R^2+X_C^2}$、$X_C=\\dfrac{1}{\\omega C}$、$\\omega=2\\pi f$ で与えられる。`,
+          `角周波数を求める：$\\omega=2\\pi\\times${fHz} \\approx ${fmt(omega, 4)}\\,\\text{rad/s}$。`,
+          `静電容量をSI単位に直す：$C=${CuF}\\,\\mu\\text{F}=${C.toExponential(3)}\\,\\text{F}$。`,
+          `リアクタンスを求める：$X_C=\\dfrac{1}{${fmt(omega, 4)}\\times${C.toExponential(3)}} \\approx ${fmt(Xc, 4)}\\,\\Omega$。`,
+          `よって $|Z|=\\sqrt{${R}^2+${fmt(Xc, 4)}^2} \\approx ${fmt(Z, 4)}\\,\\Omega$。`,
+        ],
+        altSteps: [
+          `別解（複素インピーダンス $Z=R-jX_C$ から位相角経由で求める）：RC直列回路の複素インピーダンスは $Z=R-jX_C$ と書ける` +
+            `（$R$が実部、コンデンサの効果は$-j$の符号がついた虚部として入る）。`,
+          `位相角は $\\varphi=\\arg(Z)=\\arctan\\!\\left(-\\dfrac{X_C}{R}\\right) \\approx ${fmt(phiDeg, 4)}^\\circ$` +
+            `（負の角は、電流の位相が電圧より進むことを表す）。`,
+          `幾何的には $\\cos\\varphi=\\dfrac{R}{|Z|}$ の関係があるので、$|Z|=\\dfrac{R}{\\cos\\varphi} \\approx \\dfrac{${R}}{\\cos(${fmt(phiDeg, 4)}^\\circ)} \\approx ${fmt(Zalt, 4)}\\,\\Omega$` +
+            `となり、ピタゴラスの定理から直接求めた値と一致する。`,
+        ],
+        diagram: svgImpedanceTriangle(R, Xc, Z, phiDeg),
+      };
+    },
+  },
+  emwave: {
+    name: "電磁波の基礎",
+    meta: "電磁波 / 大学基礎",
+    unitLabel: "",
+    gen() {
+      // c = fλ。真空中の光速cは一定なので、fとλのどちらかが未知として問う（毎回どちらかをランダムに選ぶ）
+      const C_LIGHT = 3.0e8;
+      const solveForLambda = Math.random() < 0.5;
+      let fHz, lambdaM;
+      if (solveForLambda) {
+        const fMHz = rand(1, 300);
+        fHz = fMHz * 1e6;
+        lambdaM = C_LIGHT / fHz; // ← 出題にも採点にもこの式を使う
+      } else {
+        lambdaM = rand(1, 300);
+        fHz = C_LIGHT / lambdaM; // ← 出題にも採点にもこの式を使う
+      }
+      // 検算用の基準値（可視光・緑色付近）：λ≈500nm、f≈6.0×10^14Hz
+      const fRef = 6.0e14, lambdaRef = 500e-9;
+      const lambdaCheck = lambdaRef * (fRef / fHz);
+      const fCheck = fRef * (lambdaRef / lambdaM);
+      return {
+        vars: { solveForLambda, fHz, lambdaM },
+        prompt: solveForLambda
+          ? `真空中を伝わる電磁波の周波数が $f=${fmt(fHz / 1e6, 4)}\\,\\text{MHz}$ であるとき、その波長 $\\lambda$ を求めよ` +
+            `（$\\lambda$ の単位はmで答えよ）。`
+          : `真空中を伝わる電磁波の波長が $\\lambda=${fmt(lambdaM, 4)}\\,\\text{m}$ であるとき、その周波数 $f$ を求めよ` +
+            `（$f$ の単位はHzで答えよ）。`,
+        given: `真空中の光速を $c=3.00\\times10^{8}\\,\\text{m/s}$ とする。`,
+        answer: solveForLambda ? lambdaM : fHz,
+        unitLabel: solveForLambda ? "m" : "Hz",
+        digits: 4,
+        why: `真空中の電磁波の速さ $c$ は、真空の誘電率と透磁率だけで決まる定数であり、電波でも可視光でも常に同じ値になる` +
+          `（マクスウェル方程式が示す帰結）。波が1秒間に進む距離 $c$ は「1秒間に通り過ぎる波の数（周波数$f$）× 1つの波の長さ（${term("波長", "波の形が1回繰り返す長さ")}$\\lambda$）」` +
+          `に等しくなければならないので、$f$ と $\\lambda$ は反比例の関係になる——周波数が高いほど波長は短くなる。`,
+        steps: solveForLambda ? [
+          `電磁波の基本関係式は $c=f\\lambda$ である。`,
+          `周波数をSI単位に直す：$f=${fmt(fHz / 1e6, 4)}\\,\\text{MHz}=${fHz.toExponential(3)}\\,\\text{Hz}$。`,
+          `$\\lambda=\\dfrac{c}{f}=\\dfrac{3.00\\times10^{8}}{${fHz.toExponential(3)}}$`,
+          `よって $\\lambda\\approx ${fmt(lambdaM, 4)}\\,\\text{m}$。`,
+        ] : [
+          `電磁波の基本関係式は $c=f\\lambda$ である。`,
+          `$f=\\dfrac{c}{\\lambda}=\\dfrac{3.00\\times10^{8}}{${lambdaM}}$`,
+          `よって $f\\approx ${fHz.toExponential(3)}\\,\\text{Hz} \\approx ${fmt(fHz, 4)}\\,\\text{Hz}$。`,
+        ],
+        altSteps: solveForLambda ? [
+          `検算（既知の基準値との比較）：可視光（緑色付近）はおよそ波長 $\\lambda_{ref}\\approx500\\,\\text{nm}$、周波数 $f_{ref}\\approx6.0\\times10^{14}\\,\\text{Hz}$ であることが知られている。`,
+          `$f\\lambda=c$ は一定なので、比例関係 $\\lambda=\\lambda_{ref}\\times\\dfrac{f_{ref}}{f}$ を使っても求まる：` +
+            `$\\lambda\\approx ${lambdaRef.toExponential(2)}\\times\\dfrac{${fRef.toExponential(2)}}{${fHz.toExponential(3)}} \\approx ${fmt(lambdaCheck, 4)}\\,\\text{m}$ となり、直接計算した値と一致する。`,
+        ] : [
+          `検算（既知の基準値との比較）：可視光（緑色付近）はおよそ波長 $\\lambda_{ref}\\approx500\\,\\text{nm}$、周波数 $f_{ref}\\approx6.0\\times10^{14}\\,\\text{Hz}$ であることが知られている。`,
+          `$f\\lambda=c$ は一定なので、比例関係 $f=f_{ref}\\times\\dfrac{\\lambda_{ref}}{\\lambda}$ を使っても求まる：` +
+            `$f\\approx ${fRef.toExponential(2)}\\times\\dfrac{${lambdaRef.toExponential(2)}}{${lambdaM}} \\approx ${fmt(fCheck, 4)}\\,\\text{Hz}$ となり、直接計算した値と一致する。`,
+        ],
+        diagram: svgSineWave(solveForLambda ? `f=${fmt(fHz / 1e6, 3)}MHz` : `λ=${fmt(lambdaM, 3)}m`),
+      };
+    },
+  },
+  vector: {
+    name: "ガウスの法則（ベクトル解析）",
+    meta: "電場の面積分 / 大学範囲",
+    unitLabel: "N·m²/C",
+    gen() {
+      // 点電荷qを中心とする半径rの球面（ガウスの面）を貫く電気フラックスΦ = Q_enc/ε0
+      const EPS0 = 8.85e-12;
+      const QnC = rand(1, 60);
+      const rCm = rand(5, 60);
+      const Q = QnC * 1e-9;
+      const r = rCm / 100;
+      const Phi = Q / EPS0; // ← 出題にも採点にもこの式を使う（ガウスの法則、rには依らない）
+      // 別解用：球面上でEを直接積分して確かめる（E=kQ/r^2は一様・法線方向）
+      const E = (K_COULOMB * Q) / (r * r);
+      const PhiAlt = E * 4 * Math.PI * r * r;
+      return {
+        vars: { QnC, rCm, Q, r, Phi },
+        prompt: `真空中に置かれた点電荷 $q=${QnC}\\,\\text{nC}$ を中心とする半径 $r=${rCm}\\,\\text{cm}$ の球面（ガウスの面）を考える。` +
+          `この球面を貫く電場の面積分（電気${term("フラックス", "面をどれだけの「場」が貫いているかを表す量。ここでは電場が面を垂直に貫く量")}） $\\Phi=\\displaystyle\\oint \\vec{E}\\cdot d\\vec{A}$ を求めよ。`,
+        given: `真空の誘電率を $\\varepsilon_0=8.85\\times10^{-12}\\,\\text{C}^2/(\\text{N·m}^2)$ とする。`,
+        answer: Phi,
+        unitLabel: "N·m²/C",
+        digits: 4,
+        why: `${term("ガウスの法則", "任意の閉じた面を貫く電気力線の総量は、その面の中に囲まれた電荷を真空の誘電率で割った値に等しいという法則")}は、` +
+          `電場を「湧き出し」を持つ場として捉える見方の帰結である。電気力線は電荷からしか生まれない（または電荷にしか吸い込まれない）ので、` +
+          `閉じた面を貫く本数は面の形や大きさに関係なく、面の中に入っている電荷の量だけで決まる——球面でも立方体でも同じ答えになる。`,
+        steps: [
+          `ガウスの法則は $\\Phi=\\displaystyle\\oint \\vec{E}\\cdot d\\vec{A}=\\dfrac{Q_{enc}}{\\varepsilon_0}$ である（$Q_{enc}$は面の中に囲まれた電荷）。`,
+          `単位をSI単位に直す：$q=${QnC}\\,\\text{nC}=${Q.toExponential(3)}\\,\\text{C}$。`,
+          `代入すると $\\Phi=\\dfrac{${Q.toExponential(3)}}{8.85\\times10^{-12}}$`,
+          `よって $\\Phi\\approx ${fmt(Phi, 4)}\\,\\text{N·m}^2/\\text{C}$（球の半径 $r$ には依らないことに注意）。`,
+        ],
+        altSteps: [
+          `別解（球面上で $\\vec{E}$ を直接積分して確かめる）：点電荷からの電場は球面上のどこでも大きさが等しく、常に面に垂直（法線方向）なので、` +
+            `積分は単純な掛け算になる：$\\Phi=\\displaystyle\\oint \\vec{E}\\cdot d\\vec{A}=E\\cdot(4\\pi r^2)$（半径$r$の球の表面積は$4\\pi r^2$）。`,
+          `クーロンの法則から $E=k\\dfrac{q}{r^2}$、単位をSI単位に直すと $r=${rCm}\\,\\text{cm}=${r}\\,\\text{m}$ なので $E\\approx ${fmt(E, 4)}\\,\\text{N/C}$。`,
+          `よって $\\Phi\\approx ${fmt(E, 4)}\\times4\\pi\\times(${r})^2 \\approx ${fmt(PhiAlt, 4)}\\,\\text{N·m}^2/\\text{C}$ となり` +
+            `（$k=1/(4\\pi\\varepsilon_0)$ の関係により）、ガウスの法則から直接求めた値とほぼ一致する（半径 $r$ に依存しないことも確認できる）。`,
+        ],
+        diagram: svgGaussianSphere("q", `q=${QnC}nC, r=${rCm}cm`),
       };
     },
   },
