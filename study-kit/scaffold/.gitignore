@@ -1,0 +1,10 @@
+# 教科書そのもの(容量が大きく、著作物なので共有しない)
+sources/
+# 教科書の文字起こし。同じく共有しない
+ocr/
+# LaTeX の中間ファイル
+**/build/
+*.aux
+*.log
+*.synctex.gz
+.DS_Store

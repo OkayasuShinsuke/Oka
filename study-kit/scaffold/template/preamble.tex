@@ -1,0 +1,36 @@
+% 共通設定。各単元の main.tex で \documentclass の直後に \input{preamble} で読み込む。
+% (build.sh が template/ を検索パスに加えるので、フォルダの深さを気にしなくてよい)
+% 使うエンジンは LuaLaTeX。日本語は luatexja(原ノ味フォントが TeX Live に同梱)。
+
+\usepackage{amsmath,amssymb,bm}
+\usepackage{siunitx}      % 単位: \qty{9.8}{m/s^2} など
+\usepackage{graphicx}     % 図: \includegraphics{fig.png}(figures/ を自動で探す)
+\usepackage[most]{tcolorbox}
+\usepackage[hidelinks]{hyperref}
+
+% ---- 記法(dict/notation.md と必ず合わせる) ----------------------------
+\newcommand{\vect}[1]{\bm{#1}}                          % ベクトルは太字
+\newcommand{\dd}{\mathrm{d}}                            % 微分の d は立体
+\newcommand{\dv}[2]{\frac{\dd #1}{\dd #2}}              % 常微分
+\newcommand{\pdv}[2]{\frac{\partial #1}{\partial #2}}   % 偏微分
+\newcommand{\eps}{\varepsilon}
+\DeclareMathOperator{\grad}{grad}
+\DeclareMathOperator{\divg}{div}
+\DeclareMathOperator{\rot}{rot}
+
+% 教科書のどこを見て書いたか(転載ではなく参照として残す)
+\newcommand{\src}[1]{\hfill{\small\textcolor{gray}{〔教科書 #1〕}}}
+
+% ---- 囲み ---------------------------------------------------------------
+\tcbset{boxrule=0.6pt, arc=2pt, left=6pt, right=6pt, top=4pt, bottom=4pt, breakable}
+\newtcolorbox{point}[1][]{colback=blue!4!white, colframe=blue!55!black,
+  fonttitle=\bfseries, title={ポイント}, #1}
+\newtcolorbox{caution}[1][]{colback=red!4!white, colframe=red!60!black,
+  fonttitle=\bfseries, title={つまずきやすい所}, #1}
+\newtcolorbox{question}[1][]{colback=green!4!white, colframe=green!45!black,
+  fonttitle=\bfseries, title={確認問題}, #1}
+\newtcolorbox{fact}[2][]{colback=gray!6!white, colframe=black!60,
+  fonttitle=\bfseries, title={#2}, #1}   % 定理・法則: \begin{fact}{クーロンの法則}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}

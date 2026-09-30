@@ -1,0 +1,63 @@
+\documentclass[a4paper,11pt]{ltjsarticle}
+\input{preamble}
+
+\title{電場と電位:2つの見方をつなぐ(動作確認用の例)}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{この単元で何が分かると嬉しいか}
+
+電荷のまわりの空間を「向きと大きさを持つ場」として見るのが\textbf{電場}、
+「高さのような1つの数」として見るのが\textbf{電位}である。
+同じ現象を2通りに書いているだけなので、片方から他方へ移れるようになると、
+問題に合わせて楽な方で解けるようになる。
+
+\section{電場の定義}
+
+点電荷 $q_1$ が距離 $r$ 離れた電荷 $q_2$ に及ぼす力の大きさはクーロンの法則で与えられる。
+
+\begin{fact}{クーロンの法則}
+  \[
+    F = \frac{1}{4\pi\eps_0}\,\frac{q_1 q_2}{r^2}
+  \]
+  同符号なら反発、異符号なら引き合う。$\eps_0$ は真空の誘電率。
+\end{fact}
+
+試しに置いた電荷 $q$ が受ける力を $\vect{F}$ とするとき、電荷の大きさで割った量を電場とする。
+\begin{equation}
+  \vect{E} = \frac{\vect{F}}{q}
+  \label{eq:E-def}
+\end{equation}
+式~\eqref{eq:E-def} の右辺は $q$ に依らないので、電場は「その場所が持つ性質」になる。
+原点にある点電荷 $Q$ がつくる電場の大きさは $E = Q/(4\pi\eps_0 r^2)$ である。
+
+\begin{point}
+  電場は「置いた電荷1\,\unit{C}あたりの力」。単位は \unit{N/C}(= \unit{V/m})。
+\end{point}
+
+\section{電位との関係}
+
+点電荷のまわりの電位は、無限遠を基準として
+\begin{equation}
+  \phi(r) = \frac{Q}{4\pi\eps_0 r}
+\end{equation}
+となる。電場は電位の傾き(の符号を変えたもの)である。
+\begin{equation}
+  \vect{E} = -\grad\phi, \qquad
+  E_r = -\dv{\phi}{r} = \frac{Q}{4\pi\eps_0 r^2}
+\end{equation}
+右端が先の $E$ と一致することを確かめよ、というのが次の確認問題である。
+
+\begin{caution}
+  電位は向きを持たない数(スカラー)。電場の向きは「電位が下がる向き」なので、
+  符号のマイナスを落とすと向きが逆になる。
+\end{caution}
+
+\begin{question}
+  $\phi(r) = Q/(4\pi\eps_0 r)$ を $r$ で微分して、$E_r = Q/(4\pi\eps_0 r^2)$ を導け。
+\end{question}
+
+\end{document}
