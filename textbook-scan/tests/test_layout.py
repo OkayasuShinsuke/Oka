@@ -1,5 +1,7 @@
 from tscan.layout import (
+    _merge_stray_equation_numbers,
     assign_reading_order,
+    classify_header_footer,
     classify_math_block,
     detect_ruby,
     estimate_body_line_height,
@@ -131,6 +133,32 @@ def test_format_ruby():
 def test_estimate_body_line_height():
     lines = [_line("あ", (0, 0, 100, 40)), _line("い", (0, 50, 100, 44)), _line("う", (0, 100, 100, 42))]
     assert estimate_body_line_height(lines) == 42
+
+
+# --- 分裂した式番号の結合(Apple Vision対策) ----------------------------------
+
+
+def test_merge_stray_equation_numbers_same_row():
+    formula = _line("F＝ qvB sin θ", (558, 483, 302, 52), conf=0.5)
+    eq_number = _line("（3.14）", (1159, 487, 113, 41), conf=1.0)
+    merged = _merge_stray_equation_numbers([formula, eq_number])
+    assert len(merged) == 1
+    assert "（3.14）" in merged[0].text
+
+
+def test_merge_stray_equation_numbers_different_row():
+    formula = _line("F＝ qvB sin θ", (558, 483, 302, 52), conf=0.5)
+    eq_number = _line("（3.14）", (1159, 900, 113, 41), conf=1.0)  # y位置が大きく離れている
+    merged = _merge_stray_equation_numbers([formula, eq_number])
+    assert len(merged) == 2
+
+
+# --- ヘッダ/フッタ(§10.1) ----------------------------------------------------
+
+
+def test_classify_header_footer_wider_band():
+    """実測: ノンブルがband_ratio=0.07の帯からわずかに外れてbody_text扱いになっていた回帰テスト。"""
+    assert classify_header_footer((687, 1898, 47, 33), 2057) == BlockKind.FOOTER
 
 
 # --- 行 -> Block 変換 --------------------------------------------------------
