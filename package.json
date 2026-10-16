@@ -4,7 +4,7 @@
   "description": "Browser-based Japanese/Vietnamese speech translator",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node run.js"
   },
   "dependencies": {
     "express": "^4.19.2"

@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -165,6 +166,48 @@ app.get('/api/tts', async (req, res) => {
     // 「エンジンが使えない」として503を返す（クライアントはこれを見てフォールバックする）
     return res.status(503).json({ error: 'VOICEVOXエンジンに接続できませんでした。', detail: String(error && error.message || error) });
   }
+});
+
+// ---- 自動更新チェック ----
+// ユーザーのPC上の git リポジトリの状態を見て、GitHub側（originのうち、今の
+// ブランチが追跡しているリモートブランチ）に新しいコミットがあるかどうかを調べる。
+// git で管理されていない（zipダウンロードだけ）環境では、エラーにせず
+// 「更新チェック不可」として返す。
+const IS_GIT_REPO = fs.existsSync(path.join(__dirname, '.git'));
+
+function git(args) {
+  return execSync(`git ${args}`, { cwd: __dirname, encoding: 'utf8', timeout: 15000 }).trim();
+}
+
+app.get('/api/update-check', (req, res) => {
+  if (!IS_GIT_REPO) {
+    return res.json({ updateAvailable: false, gitAvailable: false });
+  }
+  try {
+    const upstream = git('rev-parse --abbrev-ref --symbolic-full-name @{u}'); // 例: origin/master
+    git(`fetch --quiet ${upstream.split('/')[0]}`);
+    const local = git('rev-parse HEAD');
+    const remote = git(`rev-parse ${upstream}`);
+    return res.json({ updateAvailable: local !== remote, gitAvailable: true, local, remote, upstream });
+  } catch (error) {
+    return res.json({ updateAvailable: false, gitAvailable: false, error: String(error && error.message || error) });
+  }
+});
+
+app.post('/api/update-apply', (req, res) => {
+  if (!IS_GIT_REPO) {
+    return res.status(400).json({ ok: false, error: 'このコピーはgitで管理されていないため、自動更新できません。' });
+  }
+  try {
+    git('pull --ff-only');
+    try { execSync('npm install --omit=dev', { cwd: __dirname, timeout: 60000 }); } catch { /* 依存関係に変更が無ければ失敗しても無視 */ }
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: String(error && error.message || error) });
+  }
+  res.json({ ok: true });
+  // レスポンスを送り終えてから、run.js に「更新したので再起動して」と伝える
+  // 特別な終了コード(87)でプロセスを終わらせる。
+  setTimeout(() => process.exit(87), 300);
 });
 
 app.listen(PORT, '0.0.0.0', () => {
